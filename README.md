@@ -29,9 +29,10 @@ A lock-free, ring-organized, fixed-size, MPMC FIFO.
 * It's a template and requires C++11.
 * Works on Windows (MSVC) and Linux (G++ and Clang) and probably any other platform with a standard C++11 compiler.
 * Only uses standard facilities.
-* *Very* simple implementation.
-* Works with PODs and non-trivial types.
+* *Very* simple implementation (as lock-free stuff go.)
+* Works with PODs, as well as non-trivial types.
 * Supports multiple producers and multiple consumers.
-* Verified with thread sanitizer (and other Clang/GCC sanitizers,) but no comprehensive testing has been done! Use with caution!
+* Does *not* allocate any memory; works within the memory you give it at construction.
+* Verified with thread sanitizer (and other Clang/GCC sanitizers,) but no comprehensive testing has been done; use with caution!
 * Is quite fast, but like most other lock-free data structures, its performance degrades under contention. For example, in my simple benchmarks on a 4GHz Intel Skylake CPU, the `put()` and `get()` methods took ~80ns with 1 producer and 1 cosumer, but degraded to ~2us with 10 producers and 10 consumers.
 * The length of the queue *must* be a power of two and less than 2^16 (at most 32'768.) I might be able to support 65'536, but the need hasn't come up yet.
