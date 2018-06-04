@@ -35,9 +35,9 @@ typedef struct {
 bool Fiber_SysInit (
     fiber_system_t * out_sys,
     fiber_size_t default_stack_reserve_size,
-    fiber_size_t default_stack_commit_size,       // Should be in [0..reserve size].
-    fiber_mem_alloc_callback_t alloc_cb,    // If either or both are NULL, will use
-    fiber_mem_free_callback_t free_cb,      // default malloc()-/free()-based versions.
+    fiber_size_t default_stack_commit_size,     // Should be in [0..reserve size].
+    fiber_mem_alloc_callback_t alloc_cb,        // If either or both are NULL, will use
+    fiber_mem_free_callback_t free_cb,          //  default malloc()-/free()-based versions.
     fiber_assert_fail_callback_t assert_fail_cb
 );
 
@@ -73,4 +73,3 @@ void * Fiber_GetUserData (
 #endif
 
 #endif  // Y_FIBER_H_INCLUDE_GUARD_
-

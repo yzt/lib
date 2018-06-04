@@ -5,8 +5,8 @@
 #include <cstdio>
 #include <cstdlib>
 
-#define FIBER_STRINGIZE_DO_(x)          #x
-#define FIBER_STRINGIZE(x)              FIBER_STRINGIZE_DO_(x)
+#define FIBER_STRINGIZE_DO_(x)              #x
+#define FIBER_STRINGIZE(x)                  FIBER_STRINGIZE_DO_(x)
 #define FIBER_ASSERT(cond, sys, msg)                            \
     do {                                                        \
         if (!(cond))                                            \
@@ -34,7 +34,145 @@ static void DefaultAssertFail (char const * cond_str, char const * filename, int
 }
 
 #if defined(_WIN32)
-#error "Put them here!"
+
+#if !defined(_WIN32_WINNT)
+    #define _WIN32_WINNT    0x0501  // We need at least Windows XP for ConvertFiberToThread()...
+#endif
+
+#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
+    #error "You must define _WIN32_WINNT to something newer than Win 2000!"
+#endif
+
+#define WIN32_LEAN_AND_MEAN
+
+#define NOGDICAPMASKS
+#define NOVIRTUALKEYCODES
+#define NOWINMESSAGES
+#define NOWINSTYLES
+#define NOSYSMETRICS
+#define NOMENUS
+#define NOICONS
+#define NOKEYSTATES
+#define NOSYSCOMMANDS
+#define NORASTEROPS
+#define NOSHOWWINDOW
+#define OEMRESOURCE
+#define NOATOM
+#define NOCLIPBOARD
+#define NOCOLOR
+#define NOCTLMGR
+#define NODRAWTEXT
+#define NOGDI
+#define NOKERNEL
+#define NOUSER
+#define NONLS
+#define NOMB
+#define NOMEMMGR
+#define NOMETAFILE
+#define NOMINMAX
+#define NOMSG
+#define NOOPENFILE
+#define NOSCROLL
+#define NOSERVICE
+#define NOSOUND
+#define NOTEXTMETRIC
+#define NOWH
+#define NOWINOFFSETS
+#define NOCOMM
+#define NOKANJI
+#define NOHELP
+#define NOPROFILER
+#define NODEFERWINDOWPOS
+#define NOMCX
+
+#include <Windows.h>
+
+static_assert(sizeof(fiber_handle_t) == sizeof(LPVOID), "Win32 fiber handle is a LPVOID, which must be the same as our fiber handle.");
+
+bool Fiber_SysInit (
+    fiber_system_t * out_sys,
+    fiber_size_t default_stack_reserve_size,
+    fiber_size_t default_stack_commit_size,
+    fiber_mem_alloc_callback_t alloc_cb,
+    fiber_mem_free_callback_t free_cb,
+    fiber_assert_fail_callback_t assert_fail_cb
+) {
+    bool ret = false;
+    if (out_sys) {
+        *out_sys = {};
+        out_sys->alloc_cb = &DefaultAlloc;
+        out_sys->free_cb = &DefaultFree;
+        out_sys->assert_fail_cb = &DefaultAssertFail;
+        out_sys->default_stack_reserve_size = default_stack_reserve_size;
+        out_sys->default_stack_commit_size = default_stack_commit_size;
+        
+        if (alloc_cb && free_cb) {
+            out_sys->alloc_cb = alloc_cb;
+            out_sys->free_cb = free_cb;
+        }
+        
+        if (assert_fail_cb)
+            out_sys->assert_fail_cb = assert_fail_cb;
+            
+        if (out_sys->default_stack_commit_size > out_sys->default_stack_reserve_size)
+            out_sys->default_stack_commit_size = out_sys->default_stack_reserve_size;
+            
+        fiber_handle_t main_fiber_handle = ::ConvertThreadToFiberEx(nullptr, FIBER_FLAG_FLOAT_SWITCH);
+        if (main_fiber_handle) {
+            out_sys->main_fiber = main_fiber_handle;
+            ret = true;
+        }
+    }
+    return ret;
+}
+
+bool Fiber_SysCleanup (
+    fiber_system_t * sys
+) {
+    bool ret = false;
+    if (sys) {
+        FIBER_ASSERT(0 == sys->live_fiber_count, sys, "There are fibers still alive in the system...");
+
+        if (sys->main_fiber) {
+            if (::ConvertFiberToThread()) {
+                *sys = {};
+                ret = true;
+            }
+        }
+    }
+    return ret;
+}
+
+fiber_handle_t Fiber_Create (
+    fiber_system_t * sys,
+    fiber_proc_t fiber_proc,
+    void * user_data, 
+    fiber_size_t stack_reserve_size,        // Set to zero to get the default
+    fiber_size_t stack_commit_size          // Set to zero to get the default
+) {
+    return nullptr;
+}
+
+bool Fiber_Destroy (
+    fiber_handle_t fiber
+) {
+    return false;
+}
+
+bool Fiber_ContextSwitch (
+    fiber_handle_t from,
+    fiber_handle_t to
+) {
+    return false;
+}
+
+void * Fiber_GetUserData (
+    fiber_handle_t fiber
+) {
+    return nullptr;
+}
+
+
 #else	// Hopefully (almost) POSIX!
 
 #include <ucontext.h>
@@ -46,25 +184,6 @@ struct fiber_internal_t {
     ucontext_t ctx;             // This is really large (~1KB) (on Linux, circa 2018.)
     alignas(64) char stack [];
 };
-
-//static fiber_internal_t *
-//InternalFiberAlloc (
-//    fiber_system_t * sys,
-//    size_t stack_size,
-//    ucontext_t * parent_ctx
-//) {
-//    auto p = sys->alloc_cb(sizeof(fiber_internal_t) + stack_size);
-//    if (p) {
-//        auto ret = static_cast<fiber_internal_t *>(p);
-//        ret->sys = sys;
-//        ret->ctx.uc_stack.ss_sp = ret->stack;
-//        ret->ctx.uc_stack.ss_size = stack_size;
-//        ret->ctx.uc_link = parent_ctx;
-//        
-//        return ret;
-//    } else
-//        return nullptr;
-//}
 
 bool
 Fiber_SysInit (
@@ -140,7 +259,7 @@ void InternalFiberProcWrapper (int p0, int p1) {
             false, param->sys,
             "Shouldn't have reached this point! Note that you must not return from a fiber proc."
         );
-    }    
+    }
 }
 
 void InternalMakeContext (ucontext_t * ctx, fiber_handle_t param1) {
