@@ -13,7 +13,7 @@ extern "C" {
 typedef size_t fiber_size_t;
 typedef void * fiber_handle_t;
 
-typedef void (*fiber_proc_t) (fiber_handle_t me, void * user_data);
+typedef void (*fiber_proc_t) (fiber_handle_t me);
 typedef void * (*fiber_mem_alloc_callback_t) (fiber_size_t size);
 typedef void (*fiber_mem_free_callback_t) (void * ptr, fiber_size_t size);
 typedef void (*fiber_assert_fail_callback_t) (
@@ -67,6 +67,26 @@ bool Fiber_ContextSwitch (
 void * Fiber_GetUserData (
     fiber_handle_t fiber
 );
+
+// On POSIX, this is a "ucontext_t *" (defined in <ucontext.h>)
+// On Win32, this is the LPVOID we got from CreateFiber(), etc.
+void * Fiber_GetNativeHandle (
+    fiber_handle_t fiber
+);
+
+#if defined(_WIN32)
+
+    void Fiber_ContextSwitch_Unchecked (
+        fiber_handle_t to
+    );
+
+    fiber_handle_t Fiber_GetMyHandle (
+    );
+
+    fiber_handle_t Fiber_GetMyNativeHandle (
+    );
+
+#endif
 
 #if defined(__cplusplus)
 }   // extern "C"

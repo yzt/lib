@@ -44,50 +44,16 @@ static void DefaultAssertFail (char const * cond_str, char const * filename, int
 #endif
 
 #define WIN32_LEAN_AND_MEAN
-
-#define NOGDICAPMASKS
-#define NOVIRTUALKEYCODES
-#define NOWINMESSAGES
-#define NOWINSTYLES
-#define NOSYSMETRICS
-#define NOMENUS
-#define NOICONS
-#define NOKEYSTATES
-#define NOSYSCOMMANDS
-#define NORASTEROPS
-#define NOSHOWWINDOW
-#define OEMRESOURCE
-#define NOATOM
-#define NOCLIPBOARD
-#define NOCOLOR
-#define NOCTLMGR
-#define NODRAWTEXT
-#define NOGDI
-#define NOKERNEL
-#define NOUSER
-#define NONLS
-#define NOMB
-#define NOMEMMGR
-#define NOMETAFILE
-#define NOMINMAX
-#define NOMSG
-#define NOOPENFILE
-#define NOSCROLL
-#define NOSERVICE
-#define NOSOUND
-#define NOTEXTMETRIC
-#define NOWH
-#define NOWINOFFSETS
-#define NOCOMM
-#define NOKANJI
-#define NOHELP
-#define NOPROFILER
-#define NODEFERWINDOWPOS
-#define NOMCX
-
 #include <Windows.h>
 
 static_assert(sizeof(fiber_handle_t) == sizeof(LPVOID), "Win32 fiber handle is a LPVOID, which must be the same as our fiber handle.");
+
+struct fiber_internal_t {
+    void * user_data;
+    fiber_proc_t proc;
+    fiber_system_t * sys;
+    LPVOID win32_handle;
+};
 
 bool Fiber_SysInit (
     fiber_system_t * out_sys,
@@ -117,10 +83,19 @@ bool Fiber_SysInit (
         if (out_sys->default_stack_commit_size > out_sys->default_stack_reserve_size)
             out_sys->default_stack_commit_size = out_sys->default_stack_reserve_size;
             
-        fiber_handle_t main_fiber_handle = ::ConvertThreadToFiberEx(nullptr, FIBER_FLAG_FLOAT_SWITCH);
-        if (main_fiber_handle) {
-            out_sys->main_fiber = main_fiber_handle;
-            ret = true;
+        auto main_fiber = static_cast<fiber_internal_t *>(out_sys->alloc_cb(sizeof(fiber_internal_t)));
+        if (main_fiber) {
+            void * main_fiber_win32_handle = ::ConvertThreadToFiberEx(nullptr, FIBER_FLAG_FLOAT_SWITCH);
+            if (main_fiber_win32_handle) {
+                main_fiber->user_data = nullptr;
+                main_fiber->proc = nullptr;
+                main_fiber->sys = out_sys;
+                main_fiber->win32_handle = main_fiber_win32_handle;
+
+                out_sys->main_fiber = main_fiber;
+                ret = true;
+            } else
+                out_sys->free_cb(main_fiber, sizeof(fiber_internal_t));
         }
     }
     return ret;
@@ -134,13 +109,24 @@ bool Fiber_SysCleanup (
         FIBER_ASSERT(0 == sys->live_fiber_count, sys, "There are fibers still alive in the system...");
 
         if (sys->main_fiber) {
+            FIBER_ASSERT(::GetCurrentFiber() == static_cast<fiber_internal_t *>(sys->main_fiber)->win32_handle, sys, "This function should be called from the same fiber and thread that initialized the system.");
+
             if (::ConvertFiberToThread()) {
+                sys->free_cb(sys->main_fiber, sizeof(fiber_internal_t));
                 *sys = {};
                 ret = true;
             }
         }
     }
     return ret;
+}
+
+void InternalFiberProcWrapper (void * param_) {
+    auto param = static_cast<fiber_internal_t *>(param_);
+    if (param && param->proc && param->sys) {
+        param->proc(param);
+        FIBER_ASSERT(false, param->sys, "Shouldn't have reached this point! Note that you must not return from a fiber proc.");
+    }
 }
 
 fiber_handle_t Fiber_Create (
@@ -150,28 +136,95 @@ fiber_handle_t Fiber_Create (
     fiber_size_t stack_reserve_size,        // Set to zero to get the default
     fiber_size_t stack_commit_size          // Set to zero to get the default
 ) {
-    return nullptr;
+    fiber_handle_t ret = nullptr;
+    if (sys && fiber_proc) {
+        if (0 == stack_reserve_size)
+            stack_reserve_size = sys->default_stack_reserve_size;
+        if (0 == stack_commit_size)
+            stack_commit_size = sys->default_stack_commit_size;
+        
+        auto fiber = static_cast<fiber_internal_t *>(sys->alloc_cb(sizeof(fiber_internal_t)));
+        if (fiber) {
+            fiber->user_data = user_data;
+            fiber->proc = fiber_proc;
+            fiber->sys = sys;
+            fiber->win32_handle = ::CreateFiberEx(stack_commit_size, stack_reserve_size, FIBER_FLAG_FLOAT_SWITCH, InternalFiberProcWrapper, fiber);
+            if (fiber->win32_handle) {
+                sys->live_fiber_count += 1;
+                ret = fiber;
+            } else {
+                sys->free_cb(fiber, sizeof(*fiber));
+            }
+        }
+    }
+    return ret;
 }
 
 bool Fiber_Destroy (
     fiber_handle_t fiber
 ) {
-    return false;
+    bool ret = false;
+    if (fiber) {
+        auto p = static_cast<fiber_internal_t *>(fiber);
+        if (p->sys) {
+            auto sys = p->sys;
+            size_t sz = sizeof(fiber_internal_t);
+            
+            *p = {};    // Reduce the chance of silent accidental post-free dereferencing...
+            sys->free_cb(p, sz);
+            
+            sys->live_fiber_count -= 1;
+            ret = true;
+        }
+    }
+    return ret;
 }
 
 bool Fiber_ContextSwitch (
     fiber_handle_t from,
     fiber_handle_t to
 ) {
-    return false;
+    bool ret = false;
+    if (from && to) {
+        auto p = static_cast<fiber_internal_t *>(from);
+        auto q = static_cast<fiber_internal_t *>(to);
+        FIBER_ASSERT(p->sys == q->sys, p->sys, "Trying to switch to a fiber in a different fiber system!");
+        
+        ::SwitchToFiber(q->win32_handle);
+    }
+    return ret;
 }
 
 void * Fiber_GetUserData (
     fiber_handle_t fiber
 ) {
-    return nullptr;
+    return fiber
+        ? static_cast<fiber_internal_t *>(fiber)->user_data
+        : nullptr;
 }
 
+
+void * Fiber_GetNativeHandle (
+    fiber_handle_t fiber
+) {
+    return fiber
+        ? static_cast<fiber_internal_t *>(fiber)->win32_handle
+        : nullptr;
+}
+
+void Fiber_ContextSwitch_Unchecked (
+    fiber_handle_t to
+) {
+    ::SwitchToFiber(static_cast<fiber_internal_t *>(to)->win32_handle);
+}
+
+fiber_handle_t Fiber_GetMyHandle () {
+    return ::GetFiberData();
+}
+
+void * Fiber_GetMyNativeHandle () {
+    return ::GetCurrentFiber();
+}
 
 #else	// Hopefully (almost) POSIX!
 
@@ -358,5 +411,13 @@ void * Fiber_GetUserData (
         : nullptr;
 }
 
-#endif  // !defined(_WIN32)
 
+void * Fiber_GetNativeHandle (
+    fiber_handle_t fiber
+) {
+    return fiber
+        ? &(static_cast<fiber_internal_t *>(fiber)->ctx)
+        : nullptr;
+}
+
+#endif  // !defined(_WIN32)
