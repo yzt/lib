@@ -47,7 +47,7 @@ SkipWhitespace (
     return ret;
 }
 
-static json_size_t
+static bool
 ParseObject (
     json_buffer_t const & in,
     json_location_t & loc,
@@ -56,43 +56,46 @@ ParseObject (
     json_error_f error_cb,
     void * user_data
 ) {
-    Y_ASSERT(in.ptr[loc.byte] == '{');
+    char c = '\0';
+
+    // skip WS and peek
+    SkipWhitespace(in, loc);
+    if (loc.eoi || loc.has_error)
+        return false;
+    c = in.ptr[loc.byte];
+
+    // check expectation
+    if ('{' != c) {
+        error_cb(
+            JSON_SEV_Error, JSON_ERR_ExpectedToken, &in, &loc, user_data,
+            "Expected a '{' for an object", '{'
+        );
+        return false;
+    }
+
+    // callback the user
     auto obj_handle = elem_cb(
         JSON_ETYPE_ObjectBegin, JSON_VTYPE_INVALID, {},
         parent, &in, &loc, user_data
     );
+
+    // increase hierarchy depth
     loc.depth += 1;
+
+    // consume and skip WS and peek
     LocAdvance(in, loc);
-    
+    SkipWhitespace(in, loc);
+    if (loc.eoi || loc.has_error) {
+        error_cb(JSON_SEV_Fatal, JSON_ERR_IncompleteInput, &in, &loc, user_data, "Found a '{' but nothing after", 0);
+        return false;
+    }
+    c = in.ptr[loc.byte];
+
     bool done = false;
     int child_count = 0;
 
-    if (!SkipWhitespace(in, loc)) {
-        error_cb(JSON_SEV_Fatal, JSON_ERR_IncompleteInput, &in, &loc, user_data, "Found a '{' but nothing after");
-        return false;
-    }
-
     char c = in.ptr[loc.byte];
-    if ('}' != c) {
-
-        while (!done && !cur.eoi && !cur.has_error) {
-        
-            char c = in.ptr[cur.byte];
-
-            if (IsWhitespace(c)) {
-                // Do nothing!
-            } else if (child_count <= 0) {  // first
-                if ('"' == c) {
-                    ParseNVP();    
-                } else if (',' == c) {
-                done = true;
-                } else if ('}' == c) {
-                done = true;
-                }
-            } else {    // !first
-            }
-            LocAdvance(in, cur);
-        }
+    while ('}' != c) {
         
     }
     
@@ -131,3 +134,1322 @@ JSON_Parse (
 
     return cur.byte;
 }
+
+
+#if 0
+#pragma once
+
+#if !defined(__KAGE__JSON_H__)
+	#define  __KAGE__JSON_H__
+
+//======================================================================
+
+#include <kage/config.h>
+#include <kage/common.h>
+#include <kage/stl/string.h>
+#include <kage/stl/stringstream.h>
+#include <kage/stl/vector.h>
+
+#include <cmath>	// pow()
+#include <cstdint>	// int64_t
+#include <cstdio>	// snprintf()
+
+//======================================================================
+
+#if defined(_MSC_VER)
+	#define snprintf _snprintf
+#endif
+
+//======================================================================
+
+namespace Kage {
+	namespace JSON {
+
+//======================================================================
+
+class Value;
+class Object;
+
+//----------------------------------------------------------------------
+
+typedef bool Bool;
+typedef int64_t Int;
+typedef double Real;
+typedef STL::String String;
+typedef STL::Vector<Value> Array;
+
+//----------------------------------------------------------------------
+
+enum class Type : uint8_t
+{
+	Null,
+	Bool,
+	Int,
+	Real,
+	String,
+	Array,
+	Object,
+};
+
+//----------------------------------------------------------------------
+
+enum class PrintType
+{
+	Compact = 1,
+	Smarter = 2,	// Object fields on new lines, arrays on the same line.
+	Pretty = 3,		// Newlines and tabs for everything
+};
+
+//======================================================================
+
+template <typename Archive>
+Value Parse (Archive & arch);
+
+//======================================================================
+
+class Value
+{
+public:
+	Value ();
+	explicit Value (Type type);
+	Value (Value const & that);
+	Value (Value && that);
+	Value (Bool b);
+	Value (Int i);
+	Value (int i);
+	Value (Real r);
+	Value (String s);
+	Value (char const * s);
+	Value (char const * s_begin, char const * s_end);
+	Value (Array a);
+	Value (Object o);
+	~Value ();
+
+	Value & operator = (Value const & that);
+	Value & operator = (Value && that);
+	Value & operator = (Bool b);
+	Value & operator = (Int i);
+	Value & operator = (int i);
+	Value & operator = (Real r);
+	Value & operator = (String const & s);
+	Value & operator = (String && s);
+	Value & operator = (char const * s);
+	Value & operator = (Array const & a);
+	Value & operator = (Array && a);
+	Value & operator = (Object const & o);
+	Value & operator = (Object && o);
+
+	Type type () const;
+	bool typeIs (Type type) const;
+	void setType (Type new_type);
+
+	bool isNull () const;
+	bool isBool () const;
+	bool isInt () const;
+	bool isReal () const;
+	bool isStr () const;
+	bool isArray () const;
+	bool isObject () const;
+
+	//template <Type t> auto get () const -> typename _TypeMap<t>::const_ref_type;
+	//template <Type t> auto get () -> typename _TypeMap<t>::ref_type;
+
+	Bool asBool () const;
+	Bool & asBool ();
+	Int asInt () const;
+	Int & asInt ();
+	Real asReal () const;
+	Real & asReal ();
+	String const & asStr () const;
+	String & asStr ();
+	Array const & asArray () const;
+	Array & asArray ();
+	Object const & asObj () const;
+	Object & asObj ();
+
+	template <typename Archive>
+	void write (Archive & arch, PrintType ptype, unsigned indent = 0) const;
+
+private:
+	void constructDefault ();
+	void constructCopy (Value const & that);
+	void constructMove (Value && that);
+	void destruct ();
+
+private:
+	union {
+		Bool b;
+		Int i;
+		Real r;
+		String * s;
+		Array * a;
+		Object * o;
+	} m_data;
+	Type m_type;
+
+public:
+	template <typename Archive>	static void WriteString (Archive & arch, String const & str);
+	template <typename Archive>	static void WriteReal (Archive & arch, Real r);
+
+	template <typename Archive> static Value ReadNull (Archive & arch);
+	template <typename Archive>	static Value ReadBool (Archive & arch);
+	template <typename Archive>	static Value ReadInt (Archive & arch);
+	template <typename Archive>	static Value ReadReal (Archive & arch);
+	template <typename Archive>	static Value ReadNumber (Archive & arch);
+	template <typename Archive>	static Value ReadString (Archive & arch);
+	template <typename Archive>	static Value ReadArray (Archive & arch);
+	template <typename Archive>	static Value ReadObject (Archive & arch);
+};
+
+//======================================================================
+
+class Object
+{
+public:
+	typedef std::pair<String, Value> Field;
+
+public:
+	template <typename Archive>
+	static Object Read (Archive & arch);
+
+public:
+	Object ();
+	Object (Object const & that);
+	Object (Object && that);
+	~Object ();
+
+	Object & operator = (Object const & that);
+	Object & operator = (Object && that);
+
+	size_t size () const;
+	bool empty () const;
+	Field & at (size_t indx);
+	Field const & at (size_t indx) const;
+
+	// Iff not found, returns >= size
+	size_t findIndex (String const & name) const;
+	bool has (String const & name) const;
+
+	// If doesn't exist, the result is undefined
+	Value const & find (String const & name, Value const & default_ret) const;
+	Value & find (String const & name, Value & default_ret);
+
+	Value & add (Field f);
+	Value & add (String s, Value v);
+
+	void clear ();
+
+	template <typename Archive>
+	void write (Archive & arch, PrintType ptype, unsigned indent = 0) const;
+
+	String toStringSlow (PrintType ptype = PrintType::Compact, unsigned indent = 0) const;
+
+private:
+	STL::Vector<Field> m_fields;
+};
+
+//======================================================================
+
+	}	// namespace JSON
+}	// namespace Kage
+
+//======================================================================
+// Implementation:
+//======================================================================
+
+namespace Kage {
+	namespace JSON {
+
+//======================================================================
+//----------------------------------------------------------------------
+
+inline Value::Value ()
+	: m_type (Type::Null)
+{
+}
+
+//----------------------------------------------------------------------
+
+inline Value::Value (Type type)
+	: m_type (type)
+{
+	constructDefault ();
+}
+
+//----------------------------------------------------------------------
+
+inline Value::Value (Value const & that)
+{
+	constructCopy (that);
+}
+
+//----------------------------------------------------------------------
+
+inline Value::Value (Value && that)
+{
+	constructMove (std::forward<Value&&>(that));
+}
+
+//----------------------------------------------------------------------
+
+inline Value::Value (Bool b)
+	: m_type (Type::Bool)
+{
+	m_data.b = b;
+}
+
+//----------------------------------------------------------------------
+
+inline Value::Value (Int i)
+	: m_type (Type::Int)
+{
+	m_data.i = i;
+}
+
+//----------------------------------------------------------------------
+
+inline Value::Value (int i)
+	: m_type (Type::Int)
+{
+	m_data.i = i;
+}
+
+//----------------------------------------------------------------------
+
+inline Value::Value (Real r)
+	: m_type (Type::Real)
+{
+	m_data.r = r;
+}
+
+//----------------------------------------------------------------------
+
+inline Value::Value (String s)
+	: m_type (Type::String)
+{
+	m_data.s = KAGE_NEW String (std::move(s));
+}
+
+//----------------------------------------------------------------------
+
+inline Value::Value (char const * s)
+	: m_type (Type::String)
+{
+	m_data.s = KAGE_NEW String (s);
+}
+
+//----------------------------------------------------------------------
+
+inline Value::Value (char const * s_begin, char const * s_end)
+	: m_type (Type::String)
+{
+	m_data.s = KAGE_NEW String (s_begin, s_end);
+}
+
+//----------------------------------------------------------------------
+
+inline Value::Value (Array a)
+	: m_type (Type::Array)
+{
+	m_data.a = KAGE_NEW Array (std::move(a));
+}
+
+//----------------------------------------------------------------------
+
+inline Value::Value (Object o)
+	: m_type (Type::Object)
+{
+	m_data.o = KAGE_NEW Object (std::move(o));
+}
+
+//----------------------------------------------------------------------
+
+inline Value::~Value ()
+{
+	destruct ();
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (Value const & that)
+{
+	if (&that != this)
+	{
+		destruct ();
+		constructCopy (that);
+	}
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (Value && that)
+{
+	if (&that != this)
+	{
+		destruct ();
+		constructMove (std::forward<Value &&>(that));
+	}
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (Bool b)
+{
+	destruct ();
+	m_type = Type::Bool;
+	m_data.b = b;
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (Int i)
+{
+	destruct ();
+	m_type = Type::Int;
+	m_data.i = i;
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (int i)
+{
+	destruct ();
+	m_type = Type::Int;
+	m_data.i = i;
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (Real r)
+{
+	destruct ();
+	m_type = Type::Real;
+	m_data.r = r;
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (String const & s)
+{
+	destruct ();
+	m_type = Type::String;
+	m_data.s = KAGE_NEW String (s);
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (String && s)
+{
+	destruct ();
+	m_type = Type::String;
+	m_data.s = KAGE_NEW String (std::move(s));
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (char const * s)
+{
+	destruct ();
+	m_type = Type::String;
+	m_data.s = KAGE_NEW String (s);
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (Array const & a)
+{
+	destruct ();
+	m_type = Type::Array;
+	m_data.a = KAGE_NEW Array (a);
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (Array && a)
+{
+	destruct ();
+	m_type = Type::Array;
+	m_data.a = KAGE_NEW Array (std::move(a));
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (Object const & o)
+{
+	destruct ();
+	m_type = Type::Object;
+	m_data.o = KAGE_NEW Object (o);
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Value::operator = (Object && o)
+{
+	destruct ();
+	m_type = Type::Object;
+	m_data.o = KAGE_NEW Object (std::move(o));
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Type Value::type () const
+{
+	return m_type;
+}
+
+//----------------------------------------------------------------------
+
+inline bool Value::typeIs (Type type) const
+{
+	return m_type == type;
+}
+
+//----------------------------------------------------------------------
+
+inline void Value::setType (Type new_type)
+{
+	if (new_type != m_type)
+	{
+		destruct ();
+		m_type = new_type;
+		constructDefault ();
+	}
+}
+
+//----------------------------------------------------------------------
+
+inline bool Value::isNull () const
+{
+	return m_type == Type::Null;
+}
+
+//----------------------------------------------------------------------
+
+inline bool Value::isBool () const
+{
+	return m_type == Type::Bool;
+}
+
+//----------------------------------------------------------------------
+
+inline bool Value::isInt () const
+{
+	return m_type == Type::Int;
+}
+
+//----------------------------------------------------------------------
+
+inline bool Value::isReal () const
+{
+	return m_type == Type::Real;
+}
+
+//----------------------------------------------------------------------
+
+inline bool Value::isStr () const
+{
+	return m_type == Type::String;
+}
+
+//----------------------------------------------------------------------
+
+inline bool Value::isArray () const
+{
+	return m_type == Type::Array;
+}
+
+//----------------------------------------------------------------------
+
+inline bool Value::isObject () const
+{
+	return m_type == Type::Object;
+}
+
+//----------------------------------------------------------------------
+
+inline Bool Value::asBool () const
+{
+	KAGE_ASSERT_STRONG (isBool());
+	return m_data.b;
+}
+
+//----------------------------------------------------------------------
+
+inline Bool & Value::asBool ()
+{
+	KAGE_ASSERT_STRONG (isBool());
+	return m_data.b;
+}
+
+//----------------------------------------------------------------------
+
+inline Int Value::asInt () const
+{
+	KAGE_ASSERT_STRONG (isInt());
+	return m_data.i;
+}
+
+//----------------------------------------------------------------------
+
+inline Int & Value::asInt ()
+{
+	KAGE_ASSERT_STRONG (isInt());
+	return m_data.i;
+}
+
+//----------------------------------------------------------------------
+
+inline Real Value::asReal () const
+{
+	KAGE_ASSERT_STRONG (isReal());
+	return m_data.r;
+}
+
+//----------------------------------------------------------------------
+
+inline Real & Value::asReal ()
+{
+	KAGE_ASSERT_STRONG (isReal());
+	return m_data.r;
+}
+
+//----------------------------------------------------------------------
+
+inline String const & Value::asStr () const
+{
+	KAGE_ASSERT_STRONG (isStr());
+	return *m_data.s;
+}
+
+//----------------------------------------------------------------------
+
+inline String & Value::asStr ()
+{
+	KAGE_ASSERT_STRONG (isStr());
+	return *m_data.s;
+}
+
+//----------------------------------------------------------------------
+
+inline Array const & Value::asArray () const
+{
+	KAGE_ASSERT_STRONG (isArray());
+	return *m_data.a;
+}
+
+//----------------------------------------------------------------------
+
+inline Array & Value::asArray ()
+{
+	KAGE_ASSERT_STRONG (isArray());
+	return *m_data.a;
+}
+
+//----------------------------------------------------------------------
+
+inline Object const & Value::asObj () const
+{
+	KAGE_ASSERT_STRONG (isObject());
+	return *m_data.o;
+}
+
+//----------------------------------------------------------------------
+
+inline Object & Value::asObj ()
+{
+	KAGE_ASSERT_STRONG (isObject());
+	return *m_data.o;
+}
+
+//----------------------------------------------------------------------
+
+template <typename Archive>
+inline void Value::write (Archive & arch, PrintType ptype, unsigned indent /*= 0*/) const
+{
+	switch (m_type)
+	{
+	case Type::Null:
+		arch << "null";
+		break;
+
+	case Type::Bool:
+		arch << (m_data.b ? "true" : "false");
+		break;
+
+	case Type::Int:
+		arch << m_data.i;
+		break;
+
+	case Type::Real:
+		WriteReal (arch, m_data.r);
+		break;
+
+	case Type::String:
+		WriteString (arch, *m_data.s);
+		break;
+
+	case Type::Array:
+		arch << '[';
+		for (size_t i = 0, e = m_data.a->size(); i < e; ++i)
+		{
+			if (i > 0) arch << ',';
+			if (ptype == PrintType::Pretty) arch << '\n' << String(indent + 1, '\t');
+			(*m_data.a)[i].write (arch, ptype, indent + 1);
+		}
+		if (ptype == PrintType::Pretty) arch << '\n' << String(indent, '\t');
+		arch << ']';
+		break;
+
+	case Type::Object:
+		m_data.o->write (arch, ptype, indent);
+		break;
+	}
+}
+
+//----------------------------------------------------------------------
+//----------------------------------------------------------------------
+
+// m_type must be already set
+inline void Value::constructDefault ()
+{
+	switch (m_type)
+	{
+		case Type::Bool:   m_data.b = false; break;
+		case Type::Int:    m_data.i = 0; break;
+		case Type::Real:   m_data.r = 0; break;
+		case Type::String: m_data.s = KAGE_NEW String; break;
+		case Type::Array:  m_data.a = KAGE_NEW Array; break;
+		case Type::Object: m_data.o = KAGE_NEW Object; break;
+		default: break;
+	}
+}
+
+//----------------------------------------------------------------------
+
+inline void Value::constructCopy (Value const & that)
+{
+	m_type = that.m_type;
+
+	switch (m_type)
+	{
+		case Type::Bool:   m_data.b = that.m_data.b; break;
+		case Type::Int:    m_data.i = that.m_data.i; break;
+		case Type::Real:   m_data.r = that.m_data.r; break;
+		case Type::String: m_data.s = KAGE_NEW String (*that.m_data.s); break;
+		case Type::Array:  m_data.a = KAGE_NEW Array (*that.m_data.a); break;
+		case Type::Object: m_data.o = KAGE_NEW Object (*that.m_data.o); break;
+		default: break;
+	}
+}
+
+//----------------------------------------------------------------------
+
+inline void Value::constructMove (Value && that)
+{
+	m_type = that.m_type;
+
+	switch (m_type)
+	{
+		case Type::Bool:   m_data.b = that.m_data.b; break;
+		case Type::Int:    m_data.i = that.m_data.i; break;
+		case Type::Real:   m_data.r = that.m_data.r; break;
+		case Type::String: m_data.s = KAGE_NEW String (std::move(*that.m_data.s)); break;
+		case Type::Array:  m_data.a = KAGE_NEW Array (std::move(*that.m_data.a)); break;
+		case Type::Object: m_data.o = KAGE_NEW Object (std::move(*that.m_data.o)); break;
+		default: break;
+	}
+
+	that.destruct ();
+}
+
+//----------------------------------------------------------------------
+
+inline void Value::destruct ()
+{
+	switch (m_type)
+	{
+		case Type::String: KAGE_DELETE (m_data.s); break;
+		case Type::Array:  KAGE_DELETE (m_data.a); break;
+		case Type::Object: KAGE_DELETE (m_data.o); break;
+		default: break;
+	}
+
+	m_type = Type::Null;
+}
+
+//----------------------------------------------------------------------
+//======================================================================
+
+inline Object::Object ()
+	: m_fields ()
+{
+}
+
+//----------------------------------------------------------------------
+
+inline Object::Object (Object const & that)
+	: m_fields (that.m_fields)
+{
+}
+
+//----------------------------------------------------------------------
+
+inline Object::Object (Object && that)
+	: m_fields (std::move(that.m_fields))
+{
+}
+
+//----------------------------------------------------------------------
+
+inline Object::~Object ()
+{
+}
+
+//----------------------------------------------------------------------
+
+inline Object & Object::operator = (Object const & that)
+{
+	if (&that != this)
+		m_fields = that.m_fields;
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline Object & Object::operator = (Object && that)
+{
+	if (&that != this)
+		m_fields = std::move(that.m_fields);
+
+	return *this;
+}
+
+//----------------------------------------------------------------------
+
+inline size_t Object::size () const
+{
+	return m_fields.size();
+}
+
+//----------------------------------------------------------------------
+
+inline bool Object::empty () const
+{
+	return m_fields.empty();
+}
+
+//----------------------------------------------------------------------
+
+inline Object::Field & Object::at (size_t indx)
+{
+	return m_fields[indx];
+}
+
+//----------------------------------------------------------------------
+
+inline Object::Field const & Object::at (size_t indx) const
+{
+	return m_fields[indx];
+}
+
+//----------------------------------------------------------------------
+
+inline size_t Object::findIndex (String const & name) const
+{
+	for (size_t i = 0; i < m_fields.size(); ++i)
+		if (name == m_fields[i].first)
+			return i;
+	return m_fields.size();
+}
+
+//----------------------------------------------------------------------
+
+inline bool Object::has (String const & name) const
+{
+	return findIndex(name) < size();
+}
+
+//----------------------------------------------------------------------
+
+inline Value const & Object::find (String const & name, Value const & default_ret) const
+{
+	auto i = findIndex(name);
+	if (i < size())
+		return m_fields[i].second;
+	else
+		return default_ret;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Object::find (String const & name, Value & default_ret)
+{
+	auto i = findIndex(name);
+	if (i < size())
+		return m_fields[i].second;
+	else
+		return default_ret;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Object::add (Field f)
+{
+	m_fields.push_back (std::move(f));
+	return m_fields.back().second;
+}
+
+//----------------------------------------------------------------------
+
+inline Value & Object::add (String s, Value v)
+{
+	m_fields.emplace_back (std::move(s), std::move(v));
+	return m_fields.back().second;
+}
+
+//----------------------------------------------------------------------
+
+inline void Object::clear ()
+{
+	m_fields.clear ();
+}
+
+//----------------------------------------------------------------------
+
+template <typename Archive>
+inline void Object::write (Archive & arch, PrintType ptype, unsigned indent /*= 0*/) const
+{
+	bool pretty = (ptype != PrintType::Compact);
+	arch << '{';
+	for (size_t i = 0, e = m_fields.size(); i < e; ++i)
+	{
+		if (i > 0) arch << ',';
+		if (pretty) arch << '\n' << String(indent + 1, '\t');
+		Value::WriteString (arch, m_fields[i].first);
+		arch << (pretty ? ": " : ":");
+		m_fields[i].second.write (arch, ptype, indent + 1);
+	}
+	if (pretty) arch << '\n' << String(indent, '\t');
+	arch << '}';
+}
+
+//----------------------------------------------------------------------
+
+inline String Object::toStringSlow (PrintType ptype, unsigned indent) const
+{
+	STL::StringStream ss;
+	write (ss, ptype, indent);
+	return ss.str();
+}
+
+//======================================================================
+
+namespace _parser_details {
+	template <typename T>
+	bool _is_ws (T const c)
+	{
+		return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
+	}
+
+	template <typename T>
+	bool _is_digit (T const c)
+	{
+		return '0' <= c && c <= '9';
+	}
+
+	template <typename Archive>
+	typename Archive::int_type _peek (Archive & arch)
+	{
+		return arch.peek ();
+	}
+
+	template <typename Archive>
+	typename Archive::int_type _consume_and_peek (Archive & arch)
+	{
+		typename Archive::char_type dummy;
+		arch.get (dummy);
+		return _peek (arch);
+	}
+
+	template <typename Archive>
+	typename Archive::int_type _skip_ws_and_peek (Archive & arch)
+	{
+		auto c = _peek (arch);
+		while (_is_ws(c))
+			c = _consume_and_peek (arch);
+
+		return c;
+	}
+
+	template <typename Archive>
+	typename Archive::int_type _consume_and_skip_ws_and_peek (Archive & arch)
+	{
+		typename Archive::int_type c;
+		do {
+			c = _consume_and_peek (arch);
+		} while (_is_ws(c));
+
+		return c;
+	}
+
+	template <typename Archive>
+	bool _read_exact_str (Archive & arch, char const * s)
+	{
+		auto c = _peek (arch);
+		for (unsigned i = 0; s[i]; ++i)
+			if (s[i] != c) return false;
+			else c = _consume_and_peek (arch);
+
+		return true;
+	}
+
+	// Supports (and assumes) only decimal literals
+	template <typename Archive>
+	Int _read_int (Archive & arch)
+	{
+		Int ret = 0;
+		bool negative = false;
+
+		auto c = _peek (arch);
+		if ('-' == c || '+' == c)
+		{
+			negative = ('-' == c);
+			c = _consume_and_peek (arch);
+		}
+		while (_is_digit(c))
+		{
+			ret = 10 * ret + (c - '0');
+			c = _consume_and_peek (arch);
+		}
+
+		if (negative)
+			ret = -ret;
+
+		return ret;
+	}
+
+	template <typename Archive>
+	Real _read_real (Archive & arch, bool & really_real, Int & integer_part)
+	{
+		really_real = false;
+
+		Int int_part = 0;
+		Real ret = 0;
+		bool negative = false;
+
+		auto c = _peek (arch);
+		if ('-' == c || '+' == c)
+		{
+			negative = ('-' == c);
+			c = _consume_and_peek (arch);
+		}
+		while (_is_digit(c))
+		{
+			int_part = 10 * int_part + (c - '0');
+			ret = 10 * ret + (c - '0');
+			c = _consume_and_peek (arch);
+		}
+
+		if ('.' == c)
+		{
+			really_real = true;
+			long double mul = 1;
+			c = _consume_and_peek (arch);
+			while (_is_digit(c))
+			{
+				mul /= 10;
+				ret = Real(ret + mul * (c - '0'));
+				c = _consume_and_peek (arch);
+			}
+		}
+
+		if ('e' == c || 'E' == c)
+		{
+			really_real = true;
+			c = _consume_and_peek (arch);
+			Int p = _read_int (arch);
+			ret *= std::pow (10.0, p);
+		}
+
+		if (negative)
+		{
+			int_part = -int_part;
+			ret = -ret;
+		}
+		integer_part = int_part;
+
+		return ret;
+	}
+
+	template <typename Archive>
+	String _read_str (Archive & arch)
+	{
+		String ret;
+		auto c = _peek (arch);
+		if (c != '"')
+			return ret;
+		c = _consume_and_peek (arch);
+		while (c != '"')
+		{
+			if ('\\' == c)
+			{
+				c = _consume_and_peek (arch);
+				switch (c)
+				{
+					case 'a': ret += '\a'; break;
+					case 'b': ret += '\b'; break;
+					case 'f': ret += '\f'; break;
+					case 'n': ret += '\n'; break;
+					case 'r': ret += '\r'; break;
+					case 't': ret += '\t'; break;
+					case 'v': ret += '\v'; break;
+					default: ret += char(c); break;
+				}
+			}
+			else
+				ret += char(c);
+
+			c = _consume_and_peek (arch);
+		}
+		_consume_and_peek (arch);
+
+		return ret;
+	}
+};
+
+//======================================================================
+
+template <typename Archive>
+Value Parse (Archive & arch)
+{
+	auto c = _parser_details::_skip_ws_and_peek (arch);
+
+	if ('{' == c)
+		return Value::ReadObject (arch);
+	else if ('[' == c)
+		return Value::ReadArray (arch);
+	else if ('"' == c)
+		return Value::ReadString (arch);
+	else if ('t' == c || 'f' == c)
+		return Value::ReadBool (arch);
+	else if ('n' == c)
+		return Value::ReadNull (arch);
+	else if (_parser_details::_is_digit(c) || '-' == c || '+' == c || '.' == c)
+		return Value::ReadNumber (arch);
+	else
+		return Value();
+}
+
+//======================================================================
+
+template <typename Archive>
+void Value::WriteString (Archive & arch, String const & str)
+{
+	arch << '"';
+	for (auto c : str)
+		switch (c)
+		{
+			case '"': arch << "\\\""; break;
+			case '\\': arch << "\\\\"; break;
+			case '\t': arch << "\\t"; break;
+			case '\r': arch << "\\r"; break;
+			case '\n': arch << "\\n"; break;
+			default: arch << c; break;
+		}
+	arch << '"';
+}
+
+//----------------------------------------------------------------------
+
+template <typename Archive>
+void Value::WriteReal (Archive & arch, Real r)
+{
+	const unsigned BufSize = 50;
+
+	char rs [BufSize + 1];
+	int l = snprintf (rs, BufSize, "%0.20g", r);
+
+	if (l > 0)
+	{
+		int i;
+		for (i = l - 1; i > 0 && rs[i] == '0'; --i);
+		if (rs[i] == '.') i += 1;
+		rs[i + 1] = '\0';
+
+		arch << rs;
+	}
+	else
+		arch << "error-in-writing-real-value";
+}
+
+//----------------------------------------------------------------------
+
+template <typename Archive>
+Value Value::ReadNull (Archive & arch)
+{
+	_parser_details::_read_exact_str (arch, "null");
+	return Value();
+}
+
+//----------------------------------------------------------------------
+
+template <typename Archive>
+Value Value::ReadBool (Archive & arch)
+{
+	auto c = _parser_details::_peek (arch);
+	if ('t' == c && _parser_details::_read_exact_str(arch, "true"))
+		return Value(true);
+	else if ('f' == c && _parser_details::_read_exact_str(arch, "false"))
+		return Value(false);
+	else return Value();
+}
+
+//----------------------------------------------------------------------
+
+template <typename Archive>
+Value Value::ReadInt (Archive & arch)
+{
+	return Value(_parser_details::_read_int(arch));
+}
+
+//----------------------------------------------------------------------
+
+template <typename Archive>
+Value Value::ReadReal (Archive & arch)
+{
+	return Value(_parser_details::_read_real(arch));
+}
+
+//----------------------------------------------------------------------
+
+template <typename Archive>
+Value Value::ReadNumber (Archive & arch)
+{
+	bool is_real = false;
+	Int i;
+	Real r = _parser_details::_read_real (arch, is_real, i);
+
+	if (is_real)
+		return Value(r);
+	else
+		return Value(i);
+}
+
+//----------------------------------------------------------------------
+
+template <typename Archive>
+Value Value::ReadString (Archive & arch)
+{
+	auto c = _parser_details::_skip_ws_and_peek (arch);
+	if (c != '"')
+		return Value();
+	else
+		return Value(_parser_details::_read_str(arch));
+}
+
+//----------------------------------------------------------------------
+
+template <typename Archive>
+Value Value::ReadArray (Archive & arch)
+{
+	auto c = _parser_details::_skip_ws_and_peek (arch);
+	if (c != '[')
+		return Value();
+
+	Value ret (Type::Array);
+
+	c = _parser_details::_consume_and_skip_ws_and_peek (arch);
+	while (']' != c)
+	{
+		ret.asArray().emplace_back (Parse(arch));
+
+		c = _parser_details::_skip_ws_and_peek (arch);
+		if (',' != c && ']' != c)
+			return ret;
+		if (',' == c)
+			c = _parser_details::_consume_and_skip_ws_and_peek (arch);
+	}
+	_parser_details::_consume_and_peek (arch);
+
+	return ret;
+}
+
+//----------------------------------------------------------------------
+
+template <typename Archive>
+Value Value::ReadObject (Archive & arch)
+{
+	return Value(Object::Read(arch));
+}
+
+//======================================================================
+
+template <typename Archive>
+Object Object::Read (Archive & arch)
+{
+	Object ret;
+
+	auto c = _parser_details::_skip_ws_and_peek (arch);
+	if (c != '{')
+		return ret;
+
+	c = _parser_details::_consume_and_skip_ws_and_peek (arch);
+	while ('}' != c)
+	{
+		String name = _parser_details::_read_str (arch);
+		c = _parser_details::_skip_ws_and_peek (arch);
+		if (':' != c)
+			return ret;
+		_parser_details::_consume_and_peek (arch);
+		Value value = Parse (arch);
+
+		ret.add (std::move(name), std::move(value));
+
+		c = _parser_details::_skip_ws_and_peek (arch);
+		if (',' != c && '}' != c)
+			return ret;
+		if (',' == c)
+			c = _parser_details::_consume_and_skip_ws_and_peek (arch);
+	}
+	_parser_details::_consume_and_peek (arch);
+
+	return ret;
+}
+
+//======================================================================
+
+	}	// namespace JSON
+}	// namespace Kage
+
+//======================================================================
+
+#endif	// __KAGE__JSON_H__
+
+#endif
