@@ -2,9 +2,273 @@
 
 #include <cassert>
 
+#define Y_OPT_JSON_TRACK_LINE_AND_COLUMN        1
+#define Y_OPT_JSON_CALC_SUBSTR_UNESCAPED_SIZE   1
+
 #define Y_ASSERT(cond, ...)         assert(cond)
 #define Y_ASSERT_STRONG(cond, ...)  assert(cond)
 
+struct Exception {
+    json_error_severity_e severity;
+    json_error_e error;
+    json_location_t location;
+    char const * msg;
+    int param1;
+    int param2;
+};
+
+struct State {
+    json_buffer_t in;
+    int cur;    // char, or -1 if EOI; Note: this must be initialized at the beginning.
+
+    json_location_t loc;
+
+    json_user_handle_t parent;
+    json_substr_t cur_name;
+
+    json_element_f elem_cb;
+    json_error_f error_cb;
+    void * user_data;
+};
+
+//static inline json_buffer_t
+//GetInput (State * state) {
+//    return {
+//        state->ptr,
+//        state->size,
+//    };
+//}
+
+//static inline json_location_t
+//GetLocation (State * state) {
+//    return {
+//        state->depth,
+//        state->pos,
+//        state->line,
+//        state->column,
+//    };
+//}
+
+static inline bool
+eoi (State const * state) {
+    return state->loc.byte >= state->in.size;
+}
+
+static inline void
+UpdateCurChar (State * state) {
+    if (!eoi(state))
+        state->cur = state->in.ptr[state->loc.byte];
+    else
+        state->cur = -1;
+}
+
+static inline void
+Advance (State * state) {
+#if defined(Y_OPT_JSON_TRACK_LINE_AND_COLUMN)
+    if ('\n' == state->in.ptr[state->loc.byte]) {
+        state->loc.line += 1;
+        state->loc.column = 1;
+    } else
+        state->loc.column += 1;
+#endif
+    state->loc.byte += 1;
+
+    UpdateCurChar(state);    
+}
+
+// Note: this is too simplistic. There are UNICODE whitespace characters not considered here.
+static inline bool
+is_whitespace (int c) {
+    return ' ' == c || '\t' == c || '\n' == c || '\r' == c /*|| '\f' == c || '\v' == c || '\b' == c*/;
+}
+
+static inline void
+consume (State * state) {
+    if (eoi(state)) {
+        throw Exception{JSON_SEV_Error, JSON_ERR_IncompleteInput, state->loc, "This should not have happened!", 0, 0};
+    }
+    Advance(state);
+}
+
+static inline void
+expect (State * state, char expected) {    // also consumes the character
+    if (state->cur != expected) {
+        throw Exception{JSON_SEV_Error, JSON_ERR_ExpectedToken, state->loc, "Expected A, but found X", expected, state->cur};
+    }
+    Advance(state);
+}
+
+static inline void
+expect (State * state, char expected1, char expected2) {
+    if (state->cur != expected1 && state->cur != expected2) {
+        throw Exception{JSON_SEV_Error, JSON_ERR_ExpectedToken, state->loc, "Expected A or B, but found X", expected1, expected2};
+    }
+    Advance(state);
+}
+
+static inline void
+skip_ws (State * state) {
+    while (!eoi(state) && is_whitespace(state->cur))
+        Advance(state);
+}
+
+//static inline char
+//skip_ws_and_peek (State * state) {
+//
+//}
+
+//static inline void
+//skip_ws_and_expect (State * state, char expected) {
+//    skip_ws(state);
+//    expect(state, expected);
+//}
+
+//static inline void
+//skip_ws_and_expect (State * state, char expected1, char expected2) {
+//    skip_ws(state);
+//    expect(state, expected1, expected2);
+//}
+
+//static inline char
+//consume_and_skip_ws (State * state) {
+//    consume(state);
+//    skip_ws(state);
+//}
+
+static inline json_substr_t
+read_str (State * state) {
+    expect(state, '"');
+    auto begin = state->loc.byte;
+    int unescaped = 0;
+    bool prev_was_backslash = false;
+    while (!eoi(state)) {
+        if (!prev_was_backslash) {
+            if ('"' == state->cur)
+                break;
+            if ('\\' == state->cur)
+                prev_was_backslash = true;
+        } else {    // previous character was actually a backslash
+            switch (state->cur) {
+            case 'u': unescaped -= 5; break;
+            case '"': case '\\': case '/': case 'b': case 'f': case 'n': case 'r': case 't': unescaped -= 1; break;
+            default: throw Exception{JSON_SEV_Pedantic, JSON_ERR_BadEscaping, state->loc, "Unknown string escape sequence", state->cur, 0}; break;
+            }
+            prev_was_backslash = false;
+        }
+        Advance(state);
+        unescaped += 1;
+    }
+    auto end = state->loc.byte;
+    expect(state, '"');
+
+    return {begin, end, json_size_t(unescaped)};
+}
+
+
+static void
+parse_value (State * state);
+
+static void
+parse_object (State * state) {
+    //skip_ws(state);
+    expect(state, '{');
+
+    auto old_parent = state->parent;
+    auto self = state->elem_cb(JSON_ETYPE_ObjectBegin, nullptr, {}, state->parent, &state->in, &state->loc, state->user_data);
+    state->parent = self;
+    state->loc.depth += 1;
+
+    skip_ws(state);
+    while ('}' != state->cur) {
+        state->cur_name = read_str(state);
+        skip_ws(state);
+        expect(state, ':');
+        skip_ws(state);
+        parse_value(state);
+        skip_ws(state);
+        if (',' != state->cur && '}' != state->cur)
+            throw Exception{JSON_SEV_Error, JSON_ERR_ExpectedToken, state->loc, "Expected ',' or '}' in object", 0, 0};
+        if (',' == state->cur) {
+            consume(state);
+            skip_ws(state);
+        }
+    }
+    consume(state);
+
+    state->loc.depth -= 1;
+    state->parent = old_parent;
+    state->elem_cb(JSON_ETYPE_ObjectEnd, self, {}, old_parent, &state->in, &state->loc, state->user_data);
+}
+
+static void
+parse_array (State * state) {
+    expect(state, '[');
+
+    auto old_parent = state->parent;
+    auto self = state->elem_cb(JSON_ETYPE_ArrayBegin, nullptr, {}, state->parent, &state->in, &state->loc, state->user_data);
+    state->parent = self;
+    state->loc.depth += 1;
+
+    skip_ws(state);
+    while (']' != state->cur) {
+        skip_ws(state);
+        parse_value(state);
+        skip_ws(state);
+        if (',' != state->cur && ']' != state->cur)
+            throw Exception{JSON_SEV_Error, JSON_ERR_ExpectedToken, state->loc, "Expected ',' or ']' in array", 0, 0};
+        if (',' == state->cur)
+            consume(state);
+    }
+    consume(state);
+
+    state->loc.depth -= 1;
+    state->parent = old_parent;
+    state->elem_cb(JSON_ETYPE_ArrayEnd, self, {}, old_parent, &state->in, &state->loc, state->user_data);
+}
+
+static void
+parse_string (State * state) {
+}
+
+static void
+parse_bool (State * state) {
+}
+
+static void
+parse_null (State * state) {
+}
+
+static void
+parse_number (State * state) {
+}
+
+static void
+parse_value (State * state) {
+    switch (state->cur) {
+    case '{': parse_object(state); break;
+    case '[': parse_array(state); break;
+    case '"': parse_string(state); break;
+    case 'n': parse_null(state); break;
+    case 't': 
+    case 'f': parse_bool(state); break;
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
+    case '-':
+    case '+':
+    case '.': parse_number(state); break;
+    default: throw Exception{JSON_SEV_Error, JSON_ERR_ExpectedValue, state->loc, "a JSON value should start with one of these characters: 0123456789+-.{[\"ntf", state->cur, 0}; break;
+    }
+}
+
+#if 0
 static inline bool
 LocAdvance (
     json_buffer_t in,
@@ -104,6 +368,7 @@ ParseObject (
 
     return done;
 }
+#endif
 
 json_size_t
 JSON_Parse (
@@ -112,27 +377,37 @@ JSON_Parse (
     json_error_f error_cb,
     void * user_data
 ) {
-    json_location_t cur = {0, 0, 1, 0, false, false};
-
+    json_location_t loc {0, 0, 1, 0};
     if (!error_cb) {
         return 0;
     }
-
     if (!elem_cb) {
-        error_cb(JSON_SEV_Fatal, JSON_ERR_BadParams, cur, in, user_data, "The element handling callback must be valid");
+        error_cb(JSON_SEV_Fatal, JSON_ERR_BadParams, &in, &loc, user_data, "The element handling callback must be valid", 0, 0);
         return 0;
-    
-
+    }
     if (!elem_cb || (!in.ptr && in.size > 0)) {
-        error_cb(JSON_SEV_Fatal, JSON_ERR_BadParams, cur, in, user_data, "Invalid input (no pointer with size > 0)"); 
+        error_cb(JSON_SEV_Fatal, JSON_ERR_BadParams, &in, &loc, user_data, "Invalid input (no pointer with size > 0)", 0, 0); 
         return 0;
     }
 
-    while (cur.byte < in.size) {
-        
+    State state;
+    state.in = in;
+    state.cur = in.ptr[0];
+    state.loc = loc;
+    state.parent = nullptr;
+    state.cur_name = {};
+    state.elem_cb = elem_cb;
+    state.error_cb = error_cb;
+    state.user_data = user_data;
+
+    try {
+        skip_ws(&state);
+        parse_object(&state);
+    } catch (Exception & e) {
+        state.error_cb(e.severity, e.error, &state.in, &e.location, state.user_data, e.msg, e.param1, e.param2);
     }
 
-    return cur.byte;
+    return state.loc.byte;
 }
 
 

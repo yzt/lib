@@ -16,25 +16,19 @@ typedef struct {
 } json_buffer_t;
 
 typedef struct {
-    json_size_t start;
-    json_size_t size;
-} json_range_t;
+    json_size_t begin;
+    json_size_t end;
+    json_size_t estimated_unescaped_size_bytes;
+} json_substr_t;
 
 typedef struct {
-    int depth;
     json_size_t byte;
-    json_size_t line;
-    json_size_t column;
-    bool eoi;
-    bool has_error;
+    int depth;
+    int line;
+    int column;
+    //bool eoi;
+    //bool has_error;
 } json_location_t;
-
-typedef union {
-    bool b;
-    long long i;
-    double r;
-    json_range_t s;    // This is NOT a NUL-terminated string!
-} json_value_u;
 
 typedef enum {
     JSON_ETYPE_INVALID = 0,
@@ -59,6 +53,20 @@ typedef enum {
     JSON_VTYPE_Object,
 } json_value_type_e;
 
+typedef union {
+    bool b;
+    long long i;
+    double r;
+    json_substr_t s;    // This is NOT a NUL-terminated string!
+    json_user_handle_t a;
+    json_user_handle_t o;
+} json_value_u;
+
+typedef struct {
+    json_value_type_e type;
+    json_value_u data;
+} json_value_t;
+
 typedef enum {
     JSON_SEV_INVALID = 0,
     JSON_SEV_Pedantic,
@@ -71,27 +79,30 @@ typedef enum {
     JSON_ERR_BadParams,
     JSON_ERR_IncompleteInput,
     JSON_ERR_ExpectedToken,
-    JSON_ERR_MissingEnclosingBrace, // pedantic
+    JSON_ERR_ExpectedValue,
+    JSON_ERR_BadEscaping,   // invalid character after a backslash (inside a string)
+    //JSON_ERR_MissingEnclosingBrace, // pedantic
 } json_error_e;
 
 typedef json_user_handle_t (*json_element_f) (
     json_elem_type_e elem_type,
-    json_value_type_e value_type,
-    json_value_u value,
+    json_user_handle_t self,
+    json_value_t value,
     json_user_handle_t parent,
     json_buffer_t const * input,
     json_location_t const * location,
     void * user_data
 );
 
-typedef bool (*json_error_f) (
+typedef void (*json_error_f) (
     json_error_severity_e severity,
     json_error_e error,
     json_buffer_t const * input,
     json_location_t const * location,
     void * user_data,
     char const * msg,
-    int param
+    int param1,
+    int param2
 );
 
 // This is a "SAX" style parser, for those old-enough to remember!
