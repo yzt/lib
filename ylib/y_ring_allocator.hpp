@@ -3,6 +3,7 @@
 #if !defined(Y_RING_ALLOCATOR_H_INCLUDE_GUARD_)
     #define  Y_RING_ALLOCATOR_H_INCLUDE_GUARD_
 
+#if 0
 #include <cstddef> // for size_t
 #include <cstdint>
 
@@ -55,5 +56,31 @@ private:
 };
 
 }
+#endif
+
+#include <stddef.h> // for size_t
+#include <stdint.h> // for uint8_t, etc.
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
+typedef struct {
+    void * mem;
+    void * free;
+    int64_t capacity;
+    int64_t remaining;
+} ring_allocator_t;
+
+bool
+Allocator_Ring_Init (
+    void * mem, // Should be aligned on 2-byte boundary
+    uint64_t capacity
+);
+
+
+#if defined(__cplusplus)
+}   // extern "C"
+#endif
 
 #endif  // Y_RING_ALLOCATOR_H_INCLUDE_GUARD_

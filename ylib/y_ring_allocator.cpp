@@ -1,3 +1,4 @@
+#if 0
 #include "y_ring_allocator.hpp"
 #include <cassert>
 
@@ -31,3 +32,6 @@ bool RingAllocator::free (Buffer buffer) {
 }
 
 }
+#endif
+
+
