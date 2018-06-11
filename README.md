@@ -18,6 +18,7 @@ A Win32-like API for **Fiber**s (cooperative thread-like objects that you must s
 * Has customizable memory allocation (does exactly 1 alloc/dealloc per fiber create/destroy.)
 * Has customizable error reporting (somewhat; the assertion failure callback can be user-defined.)
 * On POSIX platforms, you should conform to the Win32 convention of never returning from the fiber function.
+* This fiber system is *not* thread-safe. You cannot use the same `fiber_system_t` or its fibers from multiple threads. But you can create multiple systems and use them however you want (although you shouldn't switch from a fiber in one system to a fiber in a different system.)
 
 
 Lock-free Queue
