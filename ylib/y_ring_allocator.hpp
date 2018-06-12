@@ -65,19 +65,41 @@ private:
 extern "C" {
 #endif
 
+typedef uint32_t allocator_size_t;
+
 typedef struct {
-    void * mem;
-    void * free;
-    int64_t capacity;
-    int64_t remaining;
-} ring_allocator_t;
+    uint8_t * ptr;
+    allocator_size_t size;
+} allocator_block_t;
+
+typedef struct {
+    uint8_t * mem;
+    uint8_t * free;
+    allocator_size_t capacity;
+    allocator_size_t remaining;
+} allocator_ring_t;
+
 
 bool
 Allocator_Ring_Init (
-    void * mem, // Should be aligned on 2-byte boundary
-    uint64_t capacity
+    allocator_ring_t * out_allocator,
+    allocator_block_t backing_memory
 );
 
+bool
+Allocator_Ring_Cleanup (
+    allocator_ring_t * allocator
+);
+
+allocator_block_t
+Allocator_Ring_Alloc (
+    allocator_size_t size
+);
+
+bool
+Allocator_Ring_Free (
+    allocator_block_t mem
+);
 
 #if defined(__cplusplus)
 }   // extern "C"

@@ -4,7 +4,11 @@
 
 TEST_CASE("Construction", "[RingAllocator]") {
     uint8_t buffer [10'000];
-    y::RingAllocator ra (buffer, sizeof(buffer));
 
-    REQUIRE(ra.capacity() == sizeof(buffer));
+    allocator_ring_t ra;
+    Allocator_Ring_Init(&ra, {buffer, sizeof(buffer)});
+
+    REQUIRE(ra.capacity == sizeof(buffer));
+
+    Allocator_Ring_Cleanup(&ra);
 }
