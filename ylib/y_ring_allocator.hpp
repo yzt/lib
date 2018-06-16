@@ -77,13 +77,26 @@ typedef struct {
     uint8_t * free;
     allocator_size_t capacity;
     allocator_size_t remaining;
+    void * user_data;
 } allocator_ring_t;
 
+// This will be invoked for every block, in memory order (not FIFO, or old-to-new, etc.)
+// The walk is stopped when the callback returns false.
+typedef bool (*allocator_ring_block_walk_f) (
+    allocator_ring_t * allocator,
+    int block_num,
+    uint8_t * block_ptr,
+    allocator_size_t block_size,
+    bool block_occupied,
+    uint8_t block_invalidity_bits,   // all bits of this should always be 0, unless the internal state of the allocator is fubar
+    void * walk_user_data
+);
 
 bool
 Allocator_Ring_Init (
     allocator_ring_t * out_allocator,
-    allocator_block_t backing_memory
+    allocator_block_t backing_memory,
+    void * user_data
 );
 
 bool
@@ -91,13 +104,22 @@ Allocator_Ring_Cleanup (
     allocator_ring_t * allocator
 );
 
+// Returns the number of blocks enumerated
+int Allocator_Ring_WalkBlocks (
+    allocator_ring_t * allocator,
+    void * walk_user_data,
+    allocator_ring_block_walk_f walk_cb
+);
+
 allocator_block_t
 Allocator_Ring_Alloc (
+    allocator_ring_t * allocator,
     allocator_size_t size
 );
 
 bool
 Allocator_Ring_Free (
+    allocator_ring_t * allocator,
     allocator_block_t mem
 );
 
