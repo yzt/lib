@@ -4,8 +4,13 @@
 #include <cstdint>
 #include <initializer_list>
 
+//======================================================================
+
 namespace y {
 
+//======================================================================
+
+#if 0
 namespace details {
     constexpr uint8_t FitsInHowManyBytes (size_t n) {
         return (n <= 0xFF) ? 1
@@ -185,5 +190,161 @@ private:
     SizeType m_size;
     SizeType m_capacity;
 };
+#endif
+
+//======================================================================
+
+/*
+Basically, there are a few kinds of buffers/arrays/blobs, depending on how
+they allocate/deal with their memory/elements:
+    1. CF:    constant capacity,    fixed length (a C array)
+    2. CV:    constant capacity, variable length (FixedArray or CappedArray)
+    3. IF: initialized capacity,    fixed length (dyn_array?)
+    4. IV: initialized capacity, variable length (non-resizing std::vector?)
+    5. DF:     dynamic capacity,    fixed length (realloc()ing a buffer?)
+    6. DV:     dynamic capacity, variable length (std::vector)
+
+Constant capacity means compile-time, and templated capacity.
+Initialized capacity means it is set at construction time and no reallocs.
+Dynamic capacity means the underlying buffer is allocated and reallocated
+at runtime.
+
+Fixed length means it's the same as capacity and all elements are always constructed and available.
+Variable length means you can insert/erase elements.
+
+(Maybe fixed-length variations should be called array and
+variable-length ones should be called vector.)
+
+Glossary:
+    * "cap" or "capacity" is the maximum number of elements the current
+        buffer (whatever and wherever that is) can hold.
+    * "len" or "length" is the current number of useable elements (always
+        less than or equal to capacity.)
+    * "size" is used for both capacity and length, when these are the same
+        thing, i.e. in fixed-length variations or situations.
+    * "ptr" is a pointer to the accompanying data, when it is stored
+        somewhere else (i.e. away from the len/cap/size and ptr itself.)
+    * "data" is the name of the array holding the data, when it is right
+        there inside the datastructure or along the metadata.
+*/
+
+//======================================================================
+
+using RangeSize = intptr_t; // This is not strictly correct, but I want it to be signed.
+constexpr RangeSize InvalidRangeSize = -1;
+
+//----------------------------------------------------------------------
+
+template <typename T>
+struct RangeRd {
+    RangeSize size;
+    T const * ptr;
+
+    constexpr bool empty () const {return !ptr || size <= 0;}
+    constexpr T const & operator [] (RangeSize index) const {return ptr;}
+    constexpr T const * begin () const {return ptr;}
+    constexpr T const * end () const {return ptr + size;}
+};
+
+template <typename T>
+struct RangeWr {
+    RangeSize size;
+    T * ptr;
+
+    constexpr bool empty () const {return !ptr || size <= 0;}
+    constexpr T const & operator [] (RangeSize index) const {return ptr;}
+    constexpr T const * begin () const {return ptr;}
+    constexpr T const * end () const {return ptr + size;}
+
+    operator RangeRd<T> () const {return {size, ptr};}
+    T & operator [] (RangeSize index) {return ptr;}
+};
+
+template <typename T>
+struct SliceWr {
+    RangeSize cap;
+    RangeSize len;
+    T * ptr;
+};
+
+//----------------------------------------------------------------------
+
+
+//----------------------------------------------------------------------
+
+template <typename T, RangeSize N>
+class Array {
+public:
+//    using Capacity = N;
+    static constexpr RangeSize Size = N;
+//    using Length = N;
+    using MyType = Array<T, N>;
+    using ValueType = T;
+
+public:
+    constexpr Array () = default;
+    constexpr Array (MyType const & that) = default;
+    constexpr Array (MyType && that) = default;
+    constexpr Array & operator = (MyType const & that) = default;
+    constexpr Array & operator = (MyType && that) = default;
+    //~Array () = default;
+
+    constexpr RangeSize size () const {return Size;}
+    constexpr ValueType const * data () const {return m_data;}
+    ValueType * data () {return m_data;}
+
+    constexpr ValueType const & operator [] (RangeSize index) const noexcept {return m_data[index];}
+    ValueType & operator [] (RangeSize index) noexcept {return m_data[index];}
+
+    constexpr ValueType const * cbegin () const noexcept {return m_data;}
+    constexpr ValueType const * cend () const noexcept {return m_data + Size;}
+    constexpr ValueType const * begin () const noexcept {return m_data;}
+    constexpr ValueType const * end () const noexcept {return m_data + Size;}
+    ValueType * begin () noexcept {return m_data;}
+    ValueType * end () noexcept {return m_data + Size;}
+
+    constexpr RangeRd<T> all () const noexcept {return {Size, m_data};}
+    RangeWr<T> all () noexcept {return {Size, m_data};}
+
+private:
+    ValueType m_data [Size];
+};
+
+template <typename T, RangeSize Capacity>
+class FixedVector {
+public:
+private:
+    RangeSize m_len;
+    alignas(T) char m_data [sizeof(T) * Capacity];
+};
+
+template <typename T>
+struct Blob {
+    RangeSize cap;
+    RangeSize len;
+    T data [];
+};
+
+//----------------------------------------------------------------------
+//======================================================================
+
+template <typename T>
+Blob<T> *
+AllocateBlob (RangeSize capacity, RangeSize length = 0, T const & init_value = T()) {
+    return nullptr;
+}
+
+//----------------------------------------------------------------------
+
+template <typename T>
+Blob<T> *   // length will be min(old_length, new_capacity)
+ReallocateBlob (Blob<T> * old_blob, RangeSize new_capacity) {
+    return nullptr;
+}
+
+//----------------------------------------------------------------------
+//======================================================================
 
 }   // namespace y
+
+//======================================================================

@@ -63,17 +63,23 @@ add_executable ("tests"
 	"tests/catch.hpp"
 	"tests/tests_main.cpp"
 
-#	"ylib/y_fiber.h"
-#	"ylib/y_fiber.cpp"
+	"ylib/y_fiber.h"
+	"ylib/y_fiber.cpp"
 	
-#	"ylib/y_lockfree.h"
+	"ylib/y_lockfree.hpp"
 	
-#	"ylib/y_json.h"
-#	"ylib/y_json.cpp"
+	"ylib/y_json.h"
+	"ylib/y_json.cpp"
 	
 	"ylib/y_ring_allocator.hpp"
 	"ylib/y_ring_allocator.cpp"
 	"tests/tests_ring_allocator.cpp"
+
+	"ylib/y_array.hpp"
+	"tests/tests_array.cpp"
+
+	"ylib/y_map.hpp"
+	"tests/tests_map.cpp"
 )
 
 #-----------------------------------------------------------------------
