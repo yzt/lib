@@ -233,6 +233,8 @@ Glossary:
 using RangeSize = intptr_t; // This is not strictly correct, but I want it to be signed.
 constexpr RangeSize InvalidRangeSize = -1;
 
+static_assert(RangeSize(-1) < RangeSize(0), "[ERROR] RangeSize must be a *signed* type.");
+
 //----------------------------------------------------------------------
 
 template <typename T>
@@ -258,6 +260,8 @@ struct RangeWr {
 
     operator RangeRd<T> () const {return {size, ptr};}
     T & operator [] (RangeSize index) {return ptr;}
+    T * begin () {return ptr;}
+    T * end () {return ptr + size;}
 };
 
 template <typename T>
@@ -269,6 +273,10 @@ struct SliceWr {
 
 //----------------------------------------------------------------------
 
+inline RangeSize
+RangeClamp (RangeSize index, RangeSize low_inc, RangeSize high_inc) {
+    return index < low_inc ? low_inc : (index > high_inc ? high_inc : index);
+}
 
 //----------------------------------------------------------------------
 
@@ -304,7 +312,14 @@ public:
     ValueType * end () noexcept {return m_data + Size;}
 
     constexpr RangeRd<T> all () const noexcept {return {Size, m_data};}
+    constexpr RangeRd<T> to (RangeSize excluded_end_index) const noexcept {auto const y = RangeClamp(excluded_end_index, 0, Size); return {y, m_data};}
+    constexpr RangeRd<T> from (RangeSize included_start_index) const noexcept {auto const x = RangeClamp(included_start_index, 0, Size); return {Size - x, m_data + x};}
+    constexpr RangeRd<T> some (RangeSize included_start_index, RangeSize excluded_end_index) const noexcept { auto const x = RangeClamp(included_start_index, 0, Size); auto const y = RangeClamp(excluded_end_index, x, Size); return {y - x, m_data + x};}
+    
     RangeWr<T> all () noexcept {return {Size, m_data};}
+    RangeWr<T> to (RangeSize excluded_end_index) noexcept {auto const y = RangeClamp(excluded_end_index, 0, Size); return {y, m_data};}
+    RangeWr<T> from (RangeSize included_start_index) noexcept {auto const x = RangeClamp(included_start_index, 0, Size); return {Size - x, m_data + x};}
+    RangeWr<T> some (RangeSize included_start_index, RangeSize excluded_end_index) noexcept {auto const x = RangeClamp(included_start_index, 0, Size); auto const y = RangeClamp(excluded_end_index, x, Size); return {y - x, m_data + x};}
 
 private:
     ValueType m_data [Size];
