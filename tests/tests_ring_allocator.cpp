@@ -2,7 +2,8 @@
 #include "y_ring_allocator.hpp"
 #include "catch.hpp"
 
-TEST_CASE("Construction", "[RingAllocator]") {
+#if 0
+TEST_CASE("RingAllocator Construction", "[alloc]") {
     uint8_t buffer [10'000];
 
     allocator_ring_t ra;
@@ -34,3 +35,4 @@ TEST_CASE("Construction", "[RingAllocator]") {
 
     REQUIRE(Allocator_Ring_Cleanup(&ra));
 }
+#endif

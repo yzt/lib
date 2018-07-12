@@ -243,23 +243,30 @@ struct RangeRd {
     T const * ptr;
 
     constexpr bool empty () const {return !ptr || size <= 0;}
-    constexpr T const & operator [] (RangeSize index) const {return ptr;}
+    constexpr T const & operator [] (RangeSize index) const {return ptr[index];}
+    constexpr T const & front () const {return *ptr;}
+    constexpr T const & back () const {return *(ptr + size - 1);}
     constexpr T const * begin () const {return ptr;}
     constexpr T const * end () const {return ptr + size;}
+    
+    void pop_back () {size -= 1;}
+    void pop_front () {ptr += 1;}
 };
 
 template <typename T>
-struct RangeWr {
+struct RangeWr : RangeRd<T> {
     RangeSize size;
     T * ptr;
 
-    constexpr bool empty () const {return !ptr || size <= 0;}
-    constexpr T const & operator [] (RangeSize index) const {return ptr;}
-    constexpr T const * begin () const {return ptr;}
-    constexpr T const * end () const {return ptr + size;}
+    //constexpr bool empty () const {return !ptr || size <= 0;}
+    //constexpr T const & operator [] (RangeSize index) const {return ptr[index];}
+    //constexpr T const * begin () const {return ptr;}
+    //constexpr T const * end () const {return ptr + size;}
 
-    operator RangeRd<T> () const {return {size, ptr};}
+    constexpr operator RangeRd<T> () const {return {size, ptr};}
     T & operator [] (RangeSize index) {return ptr;}
+    T & front () {return *ptr;}
+    T & back () {return *(ptr + size - 1);}
     T * begin () {return ptr;}
     T * end () {return ptr + size;}
 };

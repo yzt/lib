@@ -2,6 +2,7 @@
 #include "y_array.hpp"
 #include "catch.hpp"
 
+#include <cstdio>
 #include <random>
 #include <utility>
 
@@ -74,11 +75,32 @@ void RandomFill (RangeWr<int> range, int low_inc, int high_exc) {
         e = low_inc + (rd() % (high_exc - low_inc));
 }
 
-TEST_CASE("Construction", "[Array]") {
+void Print (RangeRd<int> range) {
+    for ( ; !range.empty(); range.pop_front())
+        ::printf("%d ", range.front());
+    ::printf("\n");
+}
+
+TEST_CASE("Array Construction", "[array]") {
     Array<int, 100> a;
 
     REQUIRE(a.size() == decltype(a)::Size);
     REQUIRE(a.size() == 100);
 
     RandomFill(a.all(), -10'000, 10'000);
+    Print(a.all());
+    ::printf("\n");
+    CHECK_FALSE(IsSorted(a.all()));
+}
+
+TEST_CASE("Partition", "[basics]") {
+    Array<int, 100> a;
+
+    REQUIRE(a.size() == decltype(a)::Size);
+    REQUIRE(a.size() == 100);
+
+    RandomFill(a.all(), -10'000, 10'000);
+    Print(a.all());
+    ::printf("\n");
+    CHECK_FALSE(IsSorted(a.all()));
 }
