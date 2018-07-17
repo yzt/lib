@@ -28,6 +28,14 @@ RangeSize Find (RangeRd<T> range, T const & key, RangeSize start_from = 0) {
     return range.size;
 }
 
+template <typename T>
+struct Unref {using Type = T;};
+
+template <typename T>
+struct Unref<T &> {using Type = T;};
+
+template <typename T>
+struct Unref<T &&> {using Type = T;};
 
 template <typename T>
 void Swap (T & a, T & b) {
@@ -36,13 +44,21 @@ void Swap (T & a, T & b) {
     b = std::move(t);
 }
 
+//template <typename T>
+//void Swap (T const & a, T const & b) = delete;
+
 template <typename T>
-RangeSize Partition (RangeWr<T> const range, RangeSize index_of_pivot) {
+RangeSize Partition (RangeWr<T> const & range, RangeSize index_of_pivot) {
     RangeSize ret = InvalidRangeSize;
     if (!range.empty() && index_of_pivot >= 0 && index_of_pivot < range.size) {
         RangeSize pivot = range.size - 1;
         if (index_of_pivot != pivot)
-            Swap(range[index_of_pivot], range[pivot]);
+        {
+            auto t = range[index_of_pivot];
+            range[index_of_pivot] = range[pivot];
+            range[pivot] = t;
+        }
+        //    Swap(range[index_of_pivot], range[pivot]);
         RangeSize p = 0;
         for (RangeSize i = 0; i < pivot; ++i) {
             if (range[i] < range[pivot]) {  // Should it be "<=" ?
@@ -86,21 +102,54 @@ TEST_CASE("Array Construction", "[array]") {
 
     REQUIRE(a.size() == decltype(a)::Size);
     REQUIRE(a.size() == 100);
+	REQUIRE(a.all().size == a.size());
+    REQUIRE(a.all().ptr == a.data());
+    REQUIRE(a.all().size == 100);
 
     RandomFill(a.all(), -10'000, 10'000);
-    Print(a.all());
-    ::printf("\n");
-    CHECK_FALSE(IsSorted(a.all()));
+    //Print(a.all());
+    //::printf("\n");
+    CHECK_FALSE(IsSorted(a.all().rd()));
 }
 
-TEST_CASE("Partition", "[basics]") {
-    Array<int, 100> a;
+TEST_CASE("Partition 1", "[basics]") {
+    Array<int, 20> a;
 
-    REQUIRE(a.size() == decltype(a)::Size);
-    REQUIRE(a.size() == 100);
+    RandomFill(a.all(), -100, 100);
+    CHECK_FALSE(IsSorted(a.all().rd()));
 
-    RandomFill(a.all(), -10'000, 10'000);
+    int c1 = 0, c2 = 0;
     Print(a.all());
-    ::printf("\n");
-    CHECK_FALSE(IsSorted(a.all()));
+    auto p = Partition(a.all(), 0);
+    ::printf("%zu\n", p);
+    Print(a.all());
+    for (y::RangeSize i = 0; i < p; ++i)
+        if (a[i] > a[p])
+            c1 += 1;
+    REQUIRE(c1 == 0);
+    for (y::RangeSize i = p + 1; i < a.size(); ++i)
+        if (a[i] < a[p])
+            c2 += 1;
+    REQUIRE(c2 == 0);
+}
+
+TEST_CASE("Partition 2", "[basics]") {
+    Array<int, 20> a;
+
+    RandomFill(a.all(), -10, 10);
+    CHECK_FALSE(IsSorted(a.all().rd()));
+
+    int c1 = 0, c2 = 0;
+    Print(a.all());
+    auto p = Partition(a.all(), 0);
+    ::printf("%zu\n", p);
+    Print(a.all());
+    for (y::RangeSize i = 0; i < p; ++i)
+        if (a[i] > a[p])
+            c1 += 1;
+    REQUIRE(c1 == 0);
+    for (y::RangeSize i = p + 1; i < a.size(); ++i)
+        if (a[i] < a[p])
+            c2 += 1;
+    REQUIRE(c2 == 0);
 }
