@@ -236,7 +236,7 @@ constexpr RangeSize InvalidRangeSize = -1;
 static_assert(RangeSize(-1) < RangeSize(0), "[ERROR] RangeSize must be a *signed* type.");
 
 //----------------------------------------------------------------------
-
+#if 0
 template <typename T>
 struct RangeRd {
     RangeSize size;
@@ -265,7 +265,7 @@ struct RangeWr {
     RangeWr (RangeSize size_, T * ptr_) : size (size_), ptr (ptr_) {}
 
     constexpr bool empty () const {return !ptr || size <= 0;}
-    //T const & operator [] (RangeSize index) const {return ptr[index];}
+    constexpr T const & operator [] (RangeSize index) const {return ptr[index];}
     constexpr T const * begin () const {return ptr;}
     constexpr T const * end () const {return ptr + size;}
 
@@ -278,6 +278,68 @@ struct RangeWr {
     T * begin () {return ptr;}
     T * end () {return ptr + size;}
 };
+#else
+template <typename T>
+class RangeRd {
+    T const * m_begin;
+    T const * m_end;
+
+public:
+    constexpr RangeRd () noexcept : m_begin (nullptr), m_end (nullptr) {}
+    constexpr RangeRd (T const * ptr_, RangeSize size_) noexcept : m_begin (ptr_), m_end (ptr_ + size_) {}
+    constexpr RangeRd (T const * begin_, T const * end_) noexcept : m_begin (begin_), m_end (end_) {}
+
+    constexpr bool empty () const noexcept {return m_end <= m_begin || m_begin == nullptr;}
+    constexpr RangeSize size () const noexcept {return m_end - m_begin;}
+
+    constexpr T const * data () const noexcept {return m_begin;}
+    constexpr T const & operator [] (RangeSize index) const noexcept {return m_begin[index];}
+    constexpr T const & front () const noexcept {return *m_begin;}
+    constexpr T const & back () const noexcept {return *(m_end - 1);}
+    constexpr T const * begin () const noexcept {return m_begin;}
+    constexpr T const * end () const noexcept {return m_end;}
+    constexpr T const * cbegin () const noexcept {return m_begin;}
+    constexpr T const * cend () const noexcept {return m_end;}
+    
+    void pop_back () noexcept {m_end -= 1;}
+    void pop_front () noexcept {m_begin += 1;}
+};
+
+template <typename T>
+struct RangeWr {
+    T * m_begin;
+    T * m_end;
+
+public:
+    constexpr RangeWr () noexcept : m_begin (nullptr), m_end (nullptr) {}
+    constexpr RangeWr (T * ptr_, RangeSize size_) noexcept : m_begin (ptr_), m_end (ptr_ + size_) {}
+    constexpr RangeWr (T * begin_, T * end_) noexcept : m_begin (begin_), m_end (end_) {}
+
+    constexpr bool empty () const noexcept {return m_end <= m_begin || m_begin == nullptr;}
+    constexpr RangeSize size () const noexcept {return m_end - m_begin;}
+
+    constexpr T const * data () const noexcept {return m_begin;}
+    constexpr T const & operator [] (RangeSize index) const noexcept {return m_begin[index];}
+    constexpr T const & front () const noexcept {return *m_begin;}
+    constexpr T const & back () const noexcept {return *(m_end - 1);}
+    constexpr T const * begin () const noexcept {return m_begin;}
+    constexpr T const * end () const noexcept {return m_end;}
+    constexpr T const * cbegin () const noexcept {return m_begin;}
+    constexpr T const * cend () const noexcept {return m_end;}
+    
+    void pop_back () noexcept {m_end -= 1;}
+    void pop_front () noexcept {m_begin += 1;}
+
+    constexpr operator RangeRd<T> () const noexcept {return {m_begin, m_end};}
+    constexpr RangeRd<T> rd () const noexcept {return {m_begin, m_end};}
+
+    T & operator [] (RangeSize index) noexcept {return m_begin[index];}
+    T & front () noexcept {return *m_begin;}
+    T & back () noexcept {return *(m_end - 1);}
+    T * begin () noexcept {return m_begin;}
+    T * end () noexcept {return m_end;}
+};
+#endif
 
 template <typename T>
 struct SliceWr {
@@ -331,10 +393,10 @@ public:
     constexpr RangeRd<T> from (RangeSize included_start_index) const noexcept {auto const x = RangeClamp(included_start_index, 0, Size); return {Size - x, m_data + x};}
     constexpr RangeRd<T> some (RangeSize included_start_index, RangeSize excluded_end_index) const noexcept { auto const x = RangeClamp(included_start_index, 0, Size); auto const y = RangeClamp(excluded_end_index, x, Size); return {y - x, m_data + x};}
     
-    RangeWr<T> all () noexcept {return {Size, m_data};}
-    RangeWr<T> to (RangeSize excluded_end_index) noexcept {auto const y = RangeClamp(excluded_end_index, 0, Size); return {y, m_data};}
-    RangeWr<T> from (RangeSize included_start_index) noexcept {auto const x = RangeClamp(included_start_index, 0, Size); return {Size - x, m_data + x};}
-    RangeWr<T> some (RangeSize included_start_index, RangeSize excluded_end_index) noexcept {auto const x = RangeClamp(included_start_index, 0, Size); auto const y = RangeClamp(excluded_end_index, x, Size); return {y - x, m_data + x};}
+    RangeWr<T> all () noexcept {return {m_data, Size};}
+    RangeWr<T> to (RangeSize excluded_end_index) noexcept {auto const y = RangeClamp(excluded_end_index, 0, Size); return {m_data, y};}
+    RangeWr<T> from (RangeSize included_start_index) noexcept {auto const x = RangeClamp(included_start_index, 0, Size); return {m_data + x, Size - x};}
+    RangeWr<T> some (RangeSize included_start_index, RangeSize excluded_end_index) noexcept {auto const x = RangeClamp(included_start_index, 0, Size); auto const y = RangeClamp(excluded_end_index, x, Size); return {m_data + x, y - x};}
 
 private:
     ValueType m_data [Size];
