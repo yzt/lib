@@ -2,6 +2,8 @@
 #include "y_array.hpp"
 #include "catch.hpp"
 
+#include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <random>
 #include <utility>
@@ -19,6 +21,11 @@ static_assert(sizeof(FixedVector<char, 65535>) == 2 + 65535 + 1, "");
 static_assert(sizeof(FixedVector<char, 65536>) == 4 + 65536 + 0, "");
 static_assert(sizeof(FixedVector<char, 65537>) == 4 + 65537 + 3, "");
 #endif
+
+double Now () {
+    using namespace std::chrono;
+    return duration_cast<duration<double>>(high_resolution_clock::now().time_since_epoch()).count();
+}
 
 template <typename T>
 RangeSize Find (RangeRd<T> range, T const & key, RangeSize start_from = 0) {
@@ -44,9 +51,6 @@ void Swap (T & a, T & b) {
     b = std::move(t);
 }
 
-//template <typename T>
-//void Swap (T const & a, T const & b) = delete;
-
 template <typename T>
 RangeSize Partition (RangeWr<T> range, RangeSize index_of_pivot) {
     RangeSize ret = InvalidRangeSize;
@@ -69,7 +73,25 @@ RangeSize Partition (RangeWr<T> range, RangeSize index_of_pivot) {
 
 template <typename T>
 void Sort (RangeWr<T> range) {
-    
+    while (range.size() > 10) {
+        auto p1 = Partition(range, range.size() - 1);
+
+        auto p2 = p1 + 1;
+        while (!(range[p1] < range[p2]))
+            ++p2;
+
+        if (p1 - 0 < range.size() - p2) {
+            Sort(range.to(p1));
+            range = range.from(p2);
+        } else {
+            Sort(range.from(p2));
+            range = range.to(p1);
+        }
+    }
+    // Insertion-sort the rest...
+    for (RangeSize i = 1; i < range.size(); ++i)
+        for (RangeSize j = i; j > 0 && range[j] < range[j - 1]; --j)
+            Swap(range[j - 1], range[j]);
 }
 
 template <typename T>
@@ -151,4 +173,87 @@ TEST_CASE("Partition 2", "[basics]") {
                 c2 += 1;
         CHECK(c2 == 0);
     }
+}
+
+TEST_CASE("Sort 1", "[basics]") {
+    for (int _ = 0; _ < 10; ++_) {
+        Array<int, 1'000> a;
+
+        RandomFill(a.all(), -50000, 50000);
+        CHECK_FALSE(IsSorted(a.all().rd()));
+
+        Sort(a.all());
+        CHECK(IsSorted(a.all().rd()));
+    }
+}
+
+TEST_CASE("Sort 2", "[basics]") {
+    for (int _ = 0; _ < 10; ++_) {
+        Array<int, 1'000> a;
+
+        RandomFill(a.all(), -5, 5);
+        CHECK_FALSE(IsSorted(a.all().rd()));
+
+        Sort(a.all());
+        CHECK(IsSorted(a.all().rd()));
+    }
+}
+
+constexpr int Iters = 100;
+constexpr int N = 100'000;
+double fill_time = 0;
+
+TEST_CASE("RandomFill Timing 1", "[timings]") {
+    auto t0 = Now();
+    for (int _ = 0; _ < Iters; ++_) {
+        Array<int, N> a;
+        RandomFill(a.all(), -50000, 50000);
+    }
+    auto dt = Now() - t0;
+    //::printf("[TIMING] RandomFill, %d, %d -> %0.3f\n", Iters, N, dt);
+    fill_time = dt;
+}
+
+TEST_CASE("Sort Timing (Wide Range)", "[timings]") {
+    auto t0 = Now();
+    for (int _ = 0; _ < Iters; ++_) {
+        Array<int, N> a;
+        RandomFill(a.all(), -50000, 50000);
+        Sort(a.all());
+    }
+    auto dt = Now() - t0;
+    ::printf("[TIMING]      Sort (  wide-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
+}
+
+TEST_CASE("Sort Timing (Narrow Range)", "[timings]") {
+    auto t0 = Now();
+    for (int _ = 0; _ < Iters; ++_) {
+        Array<int, N> a;
+        RandomFill(a.all(), -5, 5);
+        Sort(a.all());
+    }
+    auto dt = Now() - t0;
+    ::printf("[TIMING]      Sort (narrow-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
+}
+
+TEST_CASE("std::sort Timing (Wide Range)", "[timings]") {
+    auto t0 = Now();
+    for (int _ = 0; _ < Iters; ++_) {
+        Array<int, N> a;
+        RandomFill(a.all(), -50000, 50000);
+        std::sort(a.all().begin(), a.all().end());
+    }
+    auto dt = Now() - t0;
+    ::printf("[TIMING] std::sort (  wide-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
+}
+
+TEST_CASE("std::sort Timing (Narrow Range)", "[timings]") {
+    auto t0 = Now();
+    for (int _ = 0; _ < Iters; ++_) {
+        Array<int, N> a;
+        RandomFill(a.all(), -5, 5);
+        std::sort(a.all().begin(), a.all().end());
+    }
+    auto dt = Now() - t0;
+    ::printf("[TIMING] std::sort (narrow-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
 }

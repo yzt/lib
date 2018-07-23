@@ -236,6 +236,14 @@ constexpr RangeSize InvalidRangeSize = -1;
 static_assert(RangeSize(-1) < RangeSize(0), "[ERROR] RangeSize must be a *signed* type.");
 
 //----------------------------------------------------------------------
+
+template <typename T>
+inline T Clamp (T x, T low, T high) {
+    return (x < low) ? low : ((high < x) ? high : x);
+}
+
+//----------------------------------------------------------------------
+
 #if 0
 template <typename T>
 struct RangeRd {
@@ -301,8 +309,12 @@ public:
     constexpr T const * cbegin () const noexcept {return m_begin;}
     constexpr T const * cend () const noexcept {return m_end;}
     
-    void pop_back () noexcept {m_end -= 1;}
     void pop_front () noexcept {m_begin += 1;}
+    void pop_back () noexcept {m_end -= 1;}
+
+    RangeRd<T> to (RangeSize excluded_end_index) noexcept {return {m_begin, Clamp(m_begin + excluded_end_index, m_begin, m_end)};}
+    RangeRd<T> from (RangeSize included_start_index) noexcept {return {Clamp(m_begin + included_start_index, m_begin, m_end), m_end};}
+    RangeRd<T> some (RangeSize included_start_index, RangeSize excluded_end_index) noexcept {return {Clamp(m_begin + included_start_index, m_begin, m_end), Clamp(m_begin + excluded_end_index, m_begin, m_end)};}
 };
 
 template <typename T>
@@ -327,8 +339,8 @@ public:
     constexpr T const * cbegin () const noexcept {return m_begin;}
     constexpr T const * cend () const noexcept {return m_end;}
     
-    void pop_back () noexcept {m_end -= 1;}
     void pop_front () noexcept {m_begin += 1;}
+    void pop_back () noexcept {m_end -= 1;}
 
     constexpr operator RangeRd<T> () const noexcept {return {m_begin, m_end};}
     constexpr RangeRd<T> rd () const noexcept {return {m_begin, m_end};}
@@ -338,6 +350,10 @@ public:
     T & back () noexcept {return *(m_end - 1);}
     T * begin () noexcept {return m_begin;}
     T * end () noexcept {return m_end;}
+
+    RangeWr<T> to (RangeSize excluded_end_index) noexcept {return {m_begin, Clamp(m_begin + excluded_end_index, m_begin, m_end)};}
+    RangeWr<T> from (RangeSize included_start_index) noexcept {return {Clamp(m_begin + included_start_index, m_begin, m_end), m_end};}
+    RangeWr<T> some (RangeSize included_start_index, RangeSize excluded_end_index) noexcept {return {Clamp(m_begin + included_start_index, m_begin, m_end), Clamp(m_begin + excluded_end_index, m_begin, m_end)};}
 };
 #endif
 
@@ -381,12 +397,12 @@ public:
     constexpr ValueType const & operator [] (RangeSize index) const noexcept {return m_data[index];}
     ValueType & operator [] (RangeSize index) noexcept {return m_data[index];}
 
-    constexpr ValueType const * cbegin () const noexcept {return m_data;}
-    constexpr ValueType const * cend () const noexcept {return m_data + Size;}
-    constexpr ValueType const * begin () const noexcept {return m_data;}
-    constexpr ValueType const * end () const noexcept {return m_data + Size;}
-    ValueType * begin () noexcept {return m_data;}
-    ValueType * end () noexcept {return m_data + Size;}
+    //constexpr ValueType const * cbegin () const noexcept {return m_data;}
+    //constexpr ValueType const * cend () const noexcept {return m_data + Size;}
+    //constexpr ValueType const * begin () const noexcept {return m_data;}
+    //constexpr ValueType const * end () const noexcept {return m_data + Size;}
+    //ValueType * begin () noexcept {return m_data;}
+    //ValueType * end () noexcept {return m_data + Size;}
 
     constexpr RangeRd<T> all () const noexcept {return {Size, m_data};}
     constexpr RangeRd<T> to (RangeSize excluded_end_index) const noexcept {auto const y = RangeClamp(excluded_end_index, 0, Size); return {y, m_data};}
@@ -405,6 +421,31 @@ private:
 template <typename T, RangeSize Capacity>
 class FixedVector {
 public:
+    FixedVector () : m_len (0) {}
+    ~FixedVector () {clear();}
+
+    void clear () noexcept(noexcept(T::~T())) {
+        // TODO: Only do this if we actually need to destruct Ts...
+        for (auto p = item(m_len - 1), q = item(0); p >= q; --p)
+            p->T::~T();
+        m_len = 0;
+    }
+
+    bool push_back (T const & v);
+    bool push_back (T && v);
+
+    template <typename... ArgTypes>
+    bool emplace (RangeSize index, ArgTypes && ... v);
+
+    template <typename... ArgTypes>
+    bool emplace_back (ArgTypes && ... v);
+
+private:
+    T * item (RangeSize index) noexcept {return reinterpret_cast<T *>(m_data) + index;}
+    T const * item (RangeSize index) const noexcept {return reinterpret_cast<T const *>(m_data) + index;}
+    T * items () noexcept {return reinterpret_cast<T *>(m_data);}
+    T const * items () const noexcept {return reinterpret_cast<T const *>(m_data);}
+
 private:
     RangeSize m_len;
     alignas(T) char m_data [sizeof(T) * Capacity];
