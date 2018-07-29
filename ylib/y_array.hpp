@@ -435,10 +435,15 @@ public:
     bool push_back (T && v);
 
     template <typename... ArgTypes>
-    bool emplace (RangeSize index, ArgTypes && ... v);
+    bool emplace_back (ArgTypes && ... v);
+
+    bool insert (RangeSize index);
+    bool insert (T const * pos);
 
     template <typename... ArgTypes>
-    bool emplace_back (ArgTypes && ... v);
+    bool emplace (RangeSize index, ArgTypes && ... v);
+    template <typename... ArgTypes>
+    bool emplace (T const * pos, ArgTypes && ... v);
 
 private:
     T * item (RangeSize index) noexcept {return reinterpret_cast<T *>(m_data) + index;}
@@ -462,7 +467,7 @@ struct Blob {
 //======================================================================
 
 template <typename T>
-Blob<T> *
+inline Blob<T> *
 AllocateBlob (RangeSize capacity, RangeSize length = 0, T const & init_value = T()) {
     return nullptr;
 }
@@ -470,12 +475,18 @@ AllocateBlob (RangeSize capacity, RangeSize length = 0, T const & init_value = T
 //----------------------------------------------------------------------
 
 template <typename T>
-Blob<T> *   // length will be min(old_length, new_capacity)
+inline Blob<T> *   // length will be min(old_length, new_capacity)
 ReallocateBlob (Blob<T> * old_blob, RangeSize new_capacity) {
     return nullptr;
 }
 
 //----------------------------------------------------------------------
+
+template <typename T>
+inline void
+FreeBlob (Blob<T> * blob) {
+}
+
 //======================================================================
 
 }   // namespace y

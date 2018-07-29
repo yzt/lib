@@ -73,7 +73,7 @@ RangeSize Partition (RangeWr<T> range, RangeSize index_of_pivot) {
 
 template <typename T>
 void Sort (RangeWr<T> range) {
-    while (range.size() > 10) {
+    while (range.size() > 20) {
         auto p1 = Partition(range, range.size() - 1);
 
         auto p2 = p1 + 1;
@@ -210,30 +210,8 @@ TEST_CASE("RandomFill Timing 1", "[timings]") {
         RandomFill(a.all(), -50000, 50000);
     }
     auto dt = Now() - t0;
-    //::printf("[TIMING] RandomFill, %d, %d -> %0.3f\n", Iters, N, dt);
+    ::printf("[TIMING] RandomFill, %d, %d -> %0.3f\n", Iters, N, dt);
     fill_time = dt;
-}
-
-TEST_CASE("Sort Timing (Wide Range)", "[timings]") {
-    auto t0 = Now();
-    for (int _ = 0; _ < Iters; ++_) {
-        Array<int, N> a;
-        RandomFill(a.all(), -50000, 50000);
-        Sort(a.all());
-    }
-    auto dt = Now() - t0;
-    ::printf("[TIMING]      Sort (  wide-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
-}
-
-TEST_CASE("Sort Timing (Narrow Range)", "[timings]") {
-    auto t0 = Now();
-    for (int _ = 0; _ < Iters; ++_) {
-        Array<int, N> a;
-        RandomFill(a.all(), -5, 5);
-        Sort(a.all());
-    }
-    auto dt = Now() - t0;
-    ::printf("[TIMING]      Sort (narrow-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
 }
 
 TEST_CASE("std::sort Timing (Wide Range)", "[timings]") {
@@ -256,4 +234,26 @@ TEST_CASE("std::sort Timing (Narrow Range)", "[timings]") {
     }
     auto dt = Now() - t0;
     ::printf("[TIMING] std::sort (narrow-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
+}
+
+TEST_CASE("Sort Timing (Wide Range)", "[timings]") {
+    auto t0 = Now();
+    for (int _ = 0; _ < Iters; ++_) {
+        Array<int, N> a;
+        RandomFill(a.all(), -50000, 50000);
+        Sort(a.all());
+    }
+    auto dt = Now() - t0;
+    ::printf("[TIMING]      Sort (  wide-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
+}
+
+TEST_CASE("Sort Timing (Narrow Range)", "[timings]") {
+    auto t0 = Now();
+    for (int _ = 0; _ < Iters; ++_) {
+        Array<int, N> a;
+        RandomFill(a.all(), -5, 5);
+        Sort(a.all());
+    }
+    auto dt = Now() - t0;
+    ::printf("[TIMING]      Sort (narrow-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
 }
