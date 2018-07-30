@@ -42,7 +42,7 @@ public:
         if (m_capacity > 0 && m_meta && m_keys && m_values) {
             Metadata const empty = {};
             Metadata * p = m_meta;
-            for (unsigned i = 0; i < m_capacity; ++i, ++p)
+            for (int i = 0; i < m_capacity; ++i, ++p)
                 *p = {};
         } else {
             throw 42;
