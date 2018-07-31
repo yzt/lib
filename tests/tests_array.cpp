@@ -22,9 +22,9 @@ static_assert(sizeof(FixedVector<char, 65536>) == 4 + 65536 + 0, "");
 static_assert(sizeof(FixedVector<char, 65537>) == 4 + 65537 + 3, "");
 #endif
 
-double Now () {
+double NowMillis () {
     using namespace std::chrono;
-    return duration_cast<duration<double>>(high_resolution_clock::now().time_since_epoch()).count();
+    return duration_cast<duration<double, std::milli>>(high_resolution_clock::now().time_since_epoch()).count();
 }
 
 template <typename T>
@@ -199,61 +199,61 @@ TEST_CASE("Sort 2", "[basics]") {
     }
 }
 
-constexpr int Iters = 100;
-constexpr int N = 100'000;
+constexpr int Iters = 10;
+constexpr int N = 10'000;
 double fill_time = 0;
 
 TEST_CASE("RandomFill Timing 1", "[timings]") {
-    auto t0 = Now();
+    auto t0 = NowMillis();
     for (int _ = 0; _ < Iters; ++_) {
         Array<int, N> a;
         RandomFill(a.all(), -50000, 50000);
     }
-    auto dt = Now() - t0;
-    ::printf("[TIMING] RandomFill, %d, %d -> %0.3f\n", Iters, N, dt);
+    auto dt = NowMillis() - t0;
+    ::printf("[TIMING] RandomFill, %d, %d -> %0.3f ms\n", Iters, N, dt);
     fill_time = dt;
 }
 
 TEST_CASE("std::sort Timing (Wide Range)", "[timings]") {
-    auto t0 = Now();
+    auto t0 = NowMillis();
     for (int _ = 0; _ < Iters; ++_) {
         Array<int, N> a;
         RandomFill(a.all(), -50000, 50000);
         std::sort(a.all().begin(), a.all().end());
     }
-    auto dt = Now() - t0;
-    ::printf("[TIMING] std::sort (  wide-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
+    auto dt = NowMillis() - t0;
+    ::printf("[TIMING] std::sort (  wide-range), %d, %d -> %0.3f ms\n", Iters, N, dt - fill_time);
 }
 
 TEST_CASE("std::sort Timing (Narrow Range)", "[timings]") {
-    auto t0 = Now();
+    auto t0 = NowMillis();
     for (int _ = 0; _ < Iters; ++_) {
         Array<int, N> a;
         RandomFill(a.all(), -5, 5);
         std::sort(a.all().begin(), a.all().end());
     }
-    auto dt = Now() - t0;
-    ::printf("[TIMING] std::sort (narrow-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
+    auto dt = NowMillis() - t0;
+    ::printf("[TIMING] std::sort (narrow-range), %d, %d -> %0.3f ms\n", Iters, N, dt - fill_time);
 }
 
 TEST_CASE("Sort Timing (Wide Range)", "[timings]") {
-    auto t0 = Now();
+    auto t0 = NowMillis();
     for (int _ = 0; _ < Iters; ++_) {
         Array<int, N> a;
         RandomFill(a.all(), -50000, 50000);
         Sort(a.all());
     }
-    auto dt = Now() - t0;
-    ::printf("[TIMING]      Sort (  wide-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
+    auto dt = NowMillis() - t0;
+    ::printf("[TIMING]      Sort (  wide-range), %d, %d -> %0.3f ms\n", Iters, N, dt - fill_time);
 }
 
 TEST_CASE("Sort Timing (Narrow Range)", "[timings]") {
-    auto t0 = Now();
+    auto t0 = NowMillis();
     for (int _ = 0; _ < Iters; ++_) {
         Array<int, N> a;
         RandomFill(a.all(), -5, 5);
         Sort(a.all());
     }
-    auto dt = Now() - t0;
-    ::printf("[TIMING]      Sort (narrow-range), %d, %d -> %0.3f\n", Iters, N, dt - fill_time);
+    auto dt = NowMillis() - t0;
+    ::printf("[TIMING]      Sort (narrow-range), %d, %d -> %0.3f ms\n", Iters, N, dt - fill_time);
 }

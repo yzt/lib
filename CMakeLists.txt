@@ -80,6 +80,9 @@ add_executable ("tests"
 
 	"ylib/y_map.hpp"
 	"tests/tests_map.cpp"
+	
+	"ylib/y_stats.hpp"
+	"tests/tests_stats.cpp"
 )
 
 #-----------------------------------------------------------------------
