@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <type_traits>
+#include <utility>
 
 //======================================================================
 
@@ -373,6 +375,13 @@ RangeClamp (RangeSize index, RangeSize low_inc, RangeSize high_inc) {
 
 //----------------------------------------------------------------------
 
+template <typename T>
+void Vector_Part (T * ptr, T * data_end, T * block_end, T * pos, RangeSize cnt) {
+    
+}
+
+//----------------------------------------------------------------------
+
 template <typename T, RangeSize N>
 class Array {
 public:
@@ -425,20 +434,40 @@ public:
     ~FixedVector () {clear();}
 
     void clear () noexcept(noexcept(T::~T())) {
-        // TODO: Only do this if we actually need to destruct Ts...
-        for (auto p = item(m_len - 1), q = item(0); p >= q; --p)
-            p->T::~T();
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            for (auto p = item(m_len - 1), q = item(0); p >= q; --p)
+                p->T::~T();
+        }
         m_len = 0;
     }
 
-    bool push_back (T const & v);
+    bool push_back (T const & v) {
+        bool ret = false;
+        if (m_len < Capacity) {
+            new (reinterpret_cast<T *>(m_data) + m_len) T (v);
+            m_len += 1;
+            ret = true;
+        }
+        return ret;
+    }
+
     bool push_back (T && v);
 
     template <typename... ArgTypes>
     bool emplace_back (ArgTypes && ... v);
 
-    bool insert (RangeSize index);
-    bool insert (T const * pos);
+    bool insert (RangeSize index, T const & v) {
+        bool ret = false;
+        if (m_len < Capacity && index < m_len && index > 0) {
+            if constexpr (std::is_trivially_constructible_v<T> && std::is_trivially_assignable_v<T>) {
+                ::memmove();
+            } else {
+            }
+        }
+        return ret;
+    }
+
+    bool insert (T const * pos, T const & v);
 
     template <typename... ArgTypes>
     bool emplace (RangeSize index, ArgTypes && ... v);
@@ -490,5 +519,59 @@ FreeBlob (Blob<T> * blob) {
 //======================================================================
 
 }   // namespace y
+
+//======================================================================
+//======================================================================
+//======================================================================
+
+namespace yExp {
+
+//======================================================================
+
+using Size = intptr_t;
+
+//======================================================================
+
+template <typename T, Size Capacity>
+class Array {
+public:
+private:
+    T m_data [Capacity];
+};
+
+//======================================================================
+
+template <typename T, Size Capacity>
+class FixedVector { // class CappedArray {
+public:
+private:
+    Size m_len;
+    alignas(T) char m_data [sizeof(T) * Capacity];
+};
+
+//======================================================================
+
+enum class AccessType {Owner, Writer, Reader};
+
+template <typename T, AccessType Access> struct PointerFromAccess {using PtrType = T *; using DataType = T;};
+template <typename T> struct PointerFromAccess<T, AccessType::Reader> {using Type = T const *; using DataType = T const;};
+
+template <typename T, AccessType Access>
+class Blob {
+public:
+    using PtrType = typename PointerFromAccess<T, Access>::PtrType;
+    using DataType = typename PointerFromAccess<T, Access>::DataType;
+
+public:
+private:
+    Size m_size;
+    DataType m_data [];
+};
+
+//----------------------------------------------------------------------
+//----------------------------------------------------------------------
+//======================================================================
+
+}   // namespace yExp
 
 //======================================================================
