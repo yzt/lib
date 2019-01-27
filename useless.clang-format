@@ -1,0 +1,106 @@
+---
+Language:										Cpp
+# BasedOnStyle:									WebKit
+AccessModifierOffset:							0
+AlignAfterOpenBracket:							Align
+AlignConsecutiveAssignments:					false
+AlignConsecutiveDeclarations:					false
+AlignEscapedNewlines:							Right
+AlignOperands:									true
+AlignTrailingComments:							true
+AllowAllParametersOfDeclarationOnNextLine:		false
+AllowShortBlocksOnASingleLine:					true
+AllowShortCaseLabelsOnASingleLine:				true
+AllowShortFunctionsOnASingleLine:				Inline
+AllowShortIfStatementsOnASingleLine:			false
+AllowShortLoopsOnASingleLine:					false
+# AlwaysBreakAfterDefinitionReturnType:						#deprecated
+AlwaysBreakAfterReturnType:						TopLevel
+AlwaysBreakBeforeMultilineStrings:				true
+AlwaysBreakTemplateDeclarations:				Yes
+BinPackArguments:								true
+BinPackParameters:								true
+BraceWrapping:
+  AfterClass:									true
+  AfterControlStatement:						false
+  AfterEnum:									false
+  AfterFunction:								false
+  AfterNamespace:								false
+  AfterStruct:									false
+  AfterUnion:									false
+  AfterExternBlock:								false
+  BeforeCatch:									false
+  BeforeElse:									false
+  IndentBraces:									false
+  SplitEmptyFunction:							true
+  SplitEmptyRecord:								true
+  SplitEmptyNamespace:							true
+BreakAfterJavaFieldAnnotations:					true
+BreakBeforeBinaryOperators:						All
+BreakBeforeBraces:								Attach
+BreakBeforeTernaryOperators:					true
+BreakConstructorInitializers:					BeforeComma
+BreakInheritanceList:							BeforeComma
+BreakStringLiterals:							true
+ColumnLimit:									96
+# CommentPragmas:									# regex
+CompactNamespaces:								true
+ConstructorInitializerAllOnOneLineOrOnePerLine:	true
+ConstructorInitializerIndentWidth:				8
+ContinuationIndentWidth:						8
+Cpp11BracedListStyle:							true
+DerivePointerAlignment:							false
+DisableFormat:									false
+FixNamespaceComments:							true
+# ForEachMacros:								['BOOST_FOREACH', 'FOR_EACH']
+IncludeBlocks:									Preserve
+# IncludeCategories:								# list of regex and priority
+IncludeIsMainRegex:								"$"
+IndentCaseLabels:								false
+IndentPPDirectives:								None
+IndentWidth:									4
+IndentWrappedFunctionNames:						false
+# JavaImportGroups:								[]
+JavaScriptQuotes:								Leave
+JavaScriptWrapImports:							true
+KeepEmptyLinesAtTheStartOfBlocks:				false
+# MacroBlockBegin:									# regex
+# MacroBlockEnd:									# regex
+MaxEmptyLinesToKeep:							1
+NamespaceIndentation:							Inner
+ObjCBinPackProtocolList:						Auto
+ObjCBlockIndentWidth:							3
+ObjCSpaceAfterProperty:							false
+ObjCSpaceBeforeProtocolList:					false
+PenaltyBreakAssignment:							0
+PenaltyBreakBeforeFirstCallParameter:			0
+PenaltyBreakComment:							0
+PenaltyBreakFirstLessLess:						0
+PenaltyBreakString:								4
+PenaltyBreakTemplateDeclaration:				0
+PenaltyExcessCharacter:							1
+PenaltyReturnTypeOnItsOwnLine:					0
+PointerAlignment:								Middle
+# RawStringFormats:									# list of RawStringFormat
+ReflowComments:									true
+SortIncludes:									true
+SortUsingDeclarations:							true
+SpaceAfterCStyleCast:							false
+SpaceAfterTemplateKeyword:						false
+SpaceBeforeAssignmentOperators:					true
+# SpaceBeforeCpp11BracedList:						false
+SpaceBeforeCtorInitializerColon:				true
+SpaceBeforeInheritanceColon:					false
+SpaceBeforeParens:								ControlStatements
+SpaceBeforeRangeBasedForLoopColon:				false
+SpaceInEmptyParentheses:						false
+SpacesBeforeTrailingComments:					1
+SpacesInAngles:									false
+SpacesInCStyleCastParentheses:					false
+SpacesInContainerLiterals:						false
+SpacesInParentheses:							false
+SpacesInSquareBrackets:							false
+Standard:										Cpp11
+# StatementMacros:								['Q_UNUSED', 'whatevs']
+TabWidth:										4
+UseTab:											Never

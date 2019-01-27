@@ -59,6 +59,15 @@ add_executable ("example_json"
 
 #-----------------------------------------------------------------------
 
+add_executable ("example_profiler"
+	"examples/example_profiler.cpp"
+
+	"ylib/y_profiler.h"
+	"ylib/y_profiler.cpp"
+)
+
+#-----------------------------------------------------------------------
+
 add_executable ("tests"
 	"tests/catch.hpp"
 	"tests/tests_main.cpp"
@@ -83,6 +92,10 @@ add_executable ("tests"
 	
 	"ylib/y_stats.hpp"
 	"tests/tests_stats.cpp"
+	
+	"ylib/y_profiler.h"
+	"ylib/y_profiler.cpp"
+	"tests/tests_profiler.cpp"
 )
 
 #-----------------------------------------------------------------------
