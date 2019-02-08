@@ -96,6 +96,9 @@ add_executable ("tests"
 	"ylib/y_profiler.h"
 	"ylib/y_profiler.cpp"
 	"tests/tests_profiler.cpp"
+	
+	"ylib/y_basics.hpp"
+	"tests/tests_basics.cpp"
 )
 
 #-----------------------------------------------------------------------
