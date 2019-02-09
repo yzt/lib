@@ -234,6 +234,8 @@ using CCStr = char const *;
     using Size = U32;
     using PtrDiff = I32;
     using IntPtr = I32;
+#else
+    #error "[Y] Are you on a 16- or 128-bit architecture?!"
 #endif
 
 //======================================================================
@@ -247,6 +249,32 @@ template <typename T> inline constexpr T && Fwd (RemoveRef<T> & v) noexcept {ret
 template <typename T> inline constexpr T && Fwd (RemoveRef<T> && v) noexcept {return static_cast<T &&>(v);}
 
 template <typename T> inline constexpr RemoveRef<T> && Mov (T && v) noexcept {return static_cast<RemoveRef<T> &&>(v);}
+
+//======================================================================
+
+struct NonCopyable {
+    NonCopyable () = default;
+    NonCopyable (NonCopyable const &) = delete;
+    NonCopyable & operator = (NonCopyable const &) = delete;
+};
+
+//----------------------------------------------------------------------
+
+struct NonMovable {
+    NonMovable () = default;
+    NonMovable (NonMovable &&) = delete;
+    NonMovable & operator = (NonMovable &&) = delete;
+};
+
+//----------------------------------------------------------------------
+
+struct NonMovableNonCopyable {
+    NonMovableNonCopyable () = default;
+    NonMovableNonCopyable (NonMovableNonCopyable const &) = delete;
+    NonMovableNonCopyable (NonMovableNonCopyable &&) = delete;
+    NonMovableNonCopyable & operator = (NonMovableNonCopyable const &) = delete;
+    NonMovableNonCopyable & operator = (NonMovableNonCopyable &&) = delete;
+};
 
 //======================================================================
 //======================================================================
@@ -369,16 +397,38 @@ BinarySearch (T * begin, T * end, U const & val) {
 }
 
 //----------------------------------------------------------------------
+
+template <typename CharType>
+Size StrLen (CharType const * s) {
+    Size ret = 0;
+    if (Y_PTR_VALID(s))
+        while (*s++)
+            ret++;
+    return ret;
+}
+
+//----------------------------------------------------------------------
 //======================================================================
 
-class Exception : public std::exception {
-public:
-    explicit Exception (char const * msg) noexcept : m_msg (msg) {}
-    virtual char const * what () const noexcept override {return m_msg;}
+#if defined(Y_OPT_STD_EXCEPTION)
+    class Exception : public std::exception {
+    public:
+        explicit Exception (char const * msg) noexcept : m_msg (msg) {}
+        virtual char const * what () const noexcept override {return m_msg;}
 
-private:
-    char const * m_msg;
-};
+    private:
+        char const * m_msg;
+    };
+#else
+    class Exception {
+    public:
+        explicit Exception (char const * msg) noexcept : m_msg (msg) {}
+        virtual char const * what () const noexcept {return m_msg;}
+
+    private:
+        char const * m_msg;
+    };
+#endif
 
 //----------------------------------------------------------------------
 
@@ -394,24 +444,72 @@ struct BadAccessException : Exception {
 
 //----------------------------------------------------------------------
 //======================================================================
+// What are these?!
+template <typename T, Size N>
+struct T0 {
+    T data [N];
+};
+
+template <typename T>
+struct T1 {
+    Size size;
+    T data [];
+};
+
+template <typename T>
+struct T2 {
+    Size len;
+    Size cap;
+    T data [];
+};
+
+template <typename T, Size N>
+struct U0 {
+    T (*data) [N];  // ?
+};
+
+template <typename T>
+struct U1 {
+    T * ptr;
+    Size size;
+};
+
+template <typename T>
+struct U2 {
+    T * ptr;
+    Size len;
+    Size cap;
+};
+
+//======================================================================
 
 struct Blob {
     Byte * ptr;
     Byte * end;
+
+    Blob () = default;
+    Blob (void * ptr_, void * end_) : ptr ((Byte *)ptr_), end ((Byte *)end_) {Y_ASSERT((ptr && end) || (!ptr && !end)); Y_ASSERT(ptr <= end);}
+    Blob (void * ptr_, Size size) : ptr ((Byte *)ptr_), end ((Byte *)ptr_ + size) {Y_ASSERT((ptr && end) || (!ptr && !end)); Y_ASSERT(ptr <= end);}
 
     bool null () const {return !Y_PTR_VALID(ptr) || !Y_PTR_VALID(end) || end < ptr;}
     bool empty () const {return end <= ptr;}
     auto size () const {return end - ptr;}
 };
 
-struct Buffer : Blob {
-    //Byte * ptr;
-    //Byte * end;
+struct Buffer {
+    Byte * ptr;
+    Byte * end;
     Byte * cap;
 
-    bool null () const {return !Y_PTR_VALID(ptr) || !Y_PTR_VALID(end) || !Y_PTR_VALID(cap) || end < ptr || cap < end;}  // Note(yzt): Don't Panic! It's OK.
-    //bool empty () const {return ptr == end;}
-    //auto size () const {return end - ptr;}
+    Buffer () = default;
+    Buffer (void * ptr_, void * cap_) : ptr ((Byte *)ptr_), end ((Byte *)ptr_), cap ((Byte *)cap_) {Y_ASSERT((ptr && end && cap) || (!ptr && !end && !cap)); Y_ASSERT(ptr <= end && end <= cap);}
+    Buffer (void * ptr_, Size cap_) : ptr ((Byte *)ptr_), end ((Byte *)ptr_), cap ((Byte *)ptr_ + cap_) {Y_ASSERT((ptr && end && cap) || (!ptr && !end && !cap)); Y_ASSERT(ptr <= end && end <= cap);}
+    Buffer (void * ptr_, void * end_, void * cap_) : ptr ((Byte *)ptr_), end ((Byte *)end_), cap ((Byte *)cap_) {Y_ASSERT((ptr && end && cap) || (!ptr && !end && !cap)); Y_ASSERT(ptr <= end && end <= cap);}
+    Buffer (void * ptr_, Size len_, Size cap_) : ptr ((Byte *)ptr_), end ((Byte *)ptr_ + len_), cap ((Byte *)ptr_ + cap_) {Y_ASSERT((ptr && end && cap) || (!ptr && !end && !cap)); Y_ASSERT(ptr <= end && end <= cap);}
+
+    bool null () const {return !Y_PTR_VALID(ptr) || !Y_PTR_VALID(end) || !Y_PTR_VALID(cap) || end < ptr || cap < end;}
+    bool empty () const {return ptr == end;}
+    auto size () const {return end - ptr;}
     bool full () const {return cap <= end;}
     auto capacity () const {return cap - ptr;}
     auto remaining () const {return cap - end;}
@@ -615,15 +713,287 @@ struct MemWriter {
 
 //======================================================================
 
-template <typename CharType>
-Size StrLen (CharType const * s) {
-    Size ret = 0;
-    if (Y_PTR_VALID(s))
-        while (*s++)
-            ret++;
-    return ret;
-}
+struct InPlaceType {};
+constexpr InPlaceType InPlace;
 
+//----------------------------------------------------------------------
+
+template <typename T>
+class Optional {
+public:
+    using ValueType = T;
+
+public:
+    constexpr Optional () noexcept {}
+    constexpr Optional (T const & v) : m_value (v), m_has_value (true) {}
+    constexpr Optional (T && v) : m_value (Mov(v)), m_has_value (true) {}
+    template <typename U>
+    constexpr Optional (U const & u) : m_value (u), m_has_value (true) {}
+    template <typename U>
+    constexpr Optional (U && u) : m_value (Mov(u)), m_has_value (true) {}
+
+    template <typename... ArgTypes>
+    constexpr Optional (InPlaceType, ArgTypes && ... args) : m_has_value (true) {
+        Y_PLACEMENT_NEW(&m_value) T (Fwd<ArgTypes>(args)...);
+    }
+
+    constexpr Optional (Optional const & that) : m_has_value (that.m_has_value) {
+        if (that.m_has_value)
+            Y_PLACEMENT_NEW(&m_value) T (that);
+    }
+    constexpr Optional (Optional && that) : m_has_value (that.m_has_value) {
+        if (that.m_has_value) {
+            Y_PLACEMENT_NEW(&m_value) T (Mov(that.m_value));
+            that.m_value.T::~T();
+            that.m_has_value = false;
+        }
+    }
+
+    template <typename U>
+    constexpr Optional (Optional<U> const & that) : m_has_value (that.m_has_value) {
+        if (that.m_has_value)
+            Y_PLACEMENT_NEW(&m_value) T (that.m_value);
+    }
+    template <typename U>
+    constexpr Optional (Optional<U> && that) : m_has_value (that.m_has_value) {
+        if (that.m_has_value) {
+            Y_PLACEMENT_NEW(&m_value) T (Mov(that.m_value));
+            that.m_value.U::~U();
+            that.m_has_value = false;
+        }
+    }
+
+    ~Optional () noexcept {reset();}
+
+    Optional & operator = (T const & v) {
+        destroyAndSetFull();
+        m_value = v;
+        return *this;
+    }
+    Optional & operator = (T && v) {
+        destroyAndSetFull();
+        m_value = Mov(v);
+        return *this;
+    }
+
+    template <typename U>
+    Optional & operator = (U const & u) {
+        destroyAndSetFull();
+        m_value = u;
+        return *this;
+    }
+    template <typename U>
+    Optional & operator = (U && u) {
+        destroyAndSetFull();
+        m_value = Mov(u);
+        return *this;
+    }
+
+    Optional & operator = (Optional const & that) {
+        if (this != &that) {
+            destroyAndSetFullTo(that.m_has_value);
+            if (m_has_value)
+                m_value = that.m_value;
+        }
+        return *this;
+    }
+    Optional & operator = (Optional && that) {
+        if (this != &that) {
+            destroyAndSetFullTo(that.m_has_value);
+            if (m_has_value) {
+                m_value = Mov(that.m_value);
+                that.m_value.T::~T();
+                that.m_has_value = false;
+            }
+        }
+        return *this;
+    }
+
+    template <typename U>
+    Optional & operator = (Optional<U> const & that) {
+        destroyAndSetFullTo(that.m_has_value);
+        if (m_has_value)
+            m_value = that.m_value;
+        return *this;
+    }
+    template <typename U>
+    Optional & operator = (Optional<U> && that) {
+        destroyAndSetFullTo(that.m_has_value);
+        if (m_has_value) {
+            m_value = Mov(that.m_value);
+            that.m_value.U::~U();
+            that.m_has_value = false;
+        }
+        return *this;
+    }
+
+#if !defined(Y_FEATURE_MSVC_IS_OLD)
+    constexpr T const * operator -> () const noexcept {return &m_value;}
+    constexpr T * operator -> () noexcept {return &m_value;}
+    
+    constexpr T const & operator * () const & noexcept {return m_value;}
+    constexpr T & operator * () & noexcept {return m_value;}
+    constexpr T const && operator * () const && noexcept {return Mov(m_value);}
+    constexpr T && operator * () && noexcept {return Mov(m_value);}
+
+    constexpr explicit operator bool () const noexcept {return m_has_value;}
+    constexpr bool has_value () const noexcept {return m_has_value;}
+
+    constexpr T const & value () const & {if (!m_has_value) throw BadAccessException("Bad Optional<> access."); return m_value;}
+    constexpr T & value () & {if (!m_has_value) throw BadAccessException("Bad Optional<> access."); return m_value;}
+
+    constexpr T const && value () const && {if (!m_has_value) throw BadAccessException("Bad Optional<> access."); return Mov(m_value);}
+    constexpr T && value () && {if (!m_has_value) throw BadAccessException("Bad Optional<> access."); return Mov(m_value);}
+
+    constexpr T const & value_or (T const & fallback) const noexcept {if (m_has_value) return m_value; else return fallback;}
+    constexpr T & value_or (T & fallback) noexcept {if (m_has_value) return m_value; else return fallback;}
+#else
+    constexpr T const * operator -> () const noexcept {return &m_value;}
+    T * operator -> () noexcept {return &m_value;}
+    
+    constexpr T const & operator * () const noexcept {return m_value;}
+    T & operator * () noexcept {return m_value;}
+
+    constexpr explicit operator bool () const noexcept {return m_has_value;}
+    constexpr bool has_value () const noexcept {return m_has_value;}
+
+    constexpr T const & value () const {if (!m_has_value) throw BadAccessException("Bad Optional<> access."); return m_value;}
+    T & value () {if (!m_has_value) throw BadAccessException("Bad Optional<> access."); return m_value;}
+
+    T const & value_or (T const & fallback) const noexcept {if (m_has_value) return m_value; else return fallback;}
+    T & value_or (T & fallback) noexcept {if (m_has_value) return m_value; else return fallback;}
+#endif
+
+    void reset () noexcept {
+        if (m_has_value) {
+            m_value.T::~T();
+            m_has_value = false;
+        }
+    }
+
+    template <typename... ArgTypes>
+    T & emplace (ArgTypes && ... args) {
+        destroyAndSetFull();
+        return *Y_PLACEMENT_NEW(&m_value) T (Fwd<ArgTypes>(args)...);
+    }
+
+private:
+    void destroyAndSetFull () {
+        if (m_has_value)
+            m_value.T::~T();
+        else
+            m_has_value = true;
+    }
+
+    void destroyAndSetFullTo (bool new_has_value) {
+        if (m_has_value)
+            m_value.T::~T();
+        m_has_value = new_has_value;
+    }
+
+private:
+    union {
+        T m_value;
+    };
+    bool m_has_value = false;
+};
+
+//======================================================================
+
+template <typename T0, typename T1>
+struct Pair {
+    T0 first;
+    T1 second;
+
+    using FirstType = T0;
+    using SecondType = T1;
+
+    Pair () = default;
+    template <typename U0>
+    Pair (U0 && first_) : first (Mov(first_)) {}
+    template <typename U0, typename U1>
+    Pair (U0 && first_, U1 && second_) : first (Mov(first_)), second (Mov(second_)) {}
+
+    template <typename U0, typename U1>
+    Pair (Pair<U0, U1> const & that) : first (that.first), second (that.second) {}
+    template <typename U0, typename U1>
+    Pair (Pair<U0, U1> && that) : first (Mov(that.first)), second (Mov(that.second)) {}
+
+    template <typename U0, typename U1>
+    Pair operator = (Pair<U0, U1> const & that) {first = that.first; second = that.second; return *this;}
+    template <typename U0, typename U1>
+    Pair operator = (Pair<U0, U1> && that) {first = Mov(that.first); second = Mov(that.second); return *this;}
+
+    template <typename U0, typename U1>
+    bool operator == (Pair<U0, U1> const & that) const {return first == that.first && second == that.second;}
+    template <typename U0, typename U1>
+    bool operator != (Pair<U0, U1> const & that) const {return !(*this == that);}
+    template <typename U0, typename U1>
+    bool operator < (Pair<U0, U1> const & that) const {if (first == that.first) return second < that.second; else return first < that.first;}
+    template <typename U0, typename U1>
+    bool operator > (Pair<U0, U1> const & that) const {if (first == that.first) return that.second < second; else return that.first < first;}
+    template <typename U0, typename U1>
+    bool operator <= (Pair<U0, U1> const & that) const {return !(*this > that);}
+    template <typename U0, typename U1>
+    bool operator >= (Pair<U0, U1> const & that) const {return !(*this < that);}
+
+    //template <typename U0, typename U1>
+    //bool operator <=> (Pair<U0, U1> const & that) const {
+    //    if (first < that.first) return -1;
+    //    else if (that.first < first) return 1;
+    //    else {
+    //        if (second < that.second) return -1;
+    //        else if (that.second < second) return 1;
+    //        else return 0;
+    //    }
+    //}
+};
+
+//----------------------------------------------------------------------
+
+template <typename T0, typename T1, typename T2>
+struct Triplet {
+    T0 first;
+    T1 second;
+    T2 third;
+
+    using FirstType = T0;
+    using SecondType = T1;
+    using ThirdType = T2;
+
+    Triplet () = default;
+    template <typename U0>
+    Triplet (U0 && first_) : first (Mov(first_)) {}
+    template <typename U0, typename U1>
+    Triplet (U0 && first_, U1 && second_) : first (Mov(first_)), second (Mov(second_)) {}
+    template <typename U0, typename U1, typename U2>
+    Triplet (U0 && first_, U1 && second_, U2 && third_) : first (Mov(first_)), second (Mov(second_)), third (Mov(third_)) {}
+
+    template <typename U0, typename U1, typename U2>
+    Triplet (Triplet<U0, U1, U2> const & that) : first (that.first), second (that.second), third (that.third) {}
+    template <typename U0, typename U1, typename U2>
+    Triplet (Triplet<U0, U1, U2> && that) : first (Mov(that.first)), second (Mov(that.second)), third (Mov(that.third)) {}
+
+    template <typename U0, typename U1, typename U2>
+    Triplet operator = (Triplet<U0, U1, U2> const & that) {first = that.first; second = that.second; third = that.third; return *this;}
+    template <typename U0, typename U1, typename U2>
+    Triplet operator = (Triplet<U0, U1, U2> && that) {first = Mov(that.first); second = Mov(that.second); third = Mov(that.third); return *this;}
+
+    template <typename U0, typename U1, typename U2>
+    bool operator == (Triplet<U0, U1, U2> const & that) const {return first == that.first && second == that.second && third == that.third;}
+    template <typename U0, typename U1, typename U2>
+    bool operator != (Triplet<U0, U1, U2> const & that) const {return !(*this == that);}
+    template <typename U0, typename U1, typename U2>
+    bool operator < (Triplet<U0, U1, U2> const & that) const {
+        if (first == that.first)
+            if (second == that.second) return third < that.third;
+            else return second < that.second;
+        else
+            return first < that.first;
+    }
+};
+
+//======================================================================
 //======================================================================
 
 }   // namespace y

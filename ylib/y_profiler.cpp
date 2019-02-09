@@ -197,7 +197,7 @@ Profiler_Internal_ProcessSamples (
             }
         if (!e) {
             g_entries.emplace_back();
-            e = &(g.back());
+            e = &(g_entries.back());
             e->ctx_name = p->ctx_name;
             e->enter_count = 0;
             e->exit_count = 0;

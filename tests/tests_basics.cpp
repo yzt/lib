@@ -7,4 +7,10 @@ TEST_CASE("Basics Basics 1", "[basics]") {
     REQUIRE(x == 0);
     x--;
     REQUIRE(x > 0);
+
+    y::Optional<y::Blob> y;
+    REQUIRE_FALSE(y.has_value());
+    REQUIRE_THROWS(y.value());
+    y.emplace(nullptr, nullptr);
+    REQUIRE(y.has_value());
 }
