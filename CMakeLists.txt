@@ -51,19 +51,19 @@ add_executable ("example_lockfreequeue"
 #-----------------------------------------------------------------------
 
 add_executable ("example_json"
-	"examples/example_json.cpp"
+	"experimental/example_json.cpp"
 
-	"ylib/y_json.h"
-	"ylib/y_json.cpp"
+	"experimental/y_json_1.h"
+	"experimental/y_json_1.cpp"
 )
 
 #-----------------------------------------------------------------------
 
 add_executable ("example_profiler"
-	"examples/example_profiler.cpp"
+	"experimental/example_profiler.cpp"
 
-	"ylib/y_profiler.h"
-	"ylib/y_profiler.cpp"
+	"experimental/y_profiler.h"
+	"experimental/y_profiler.cpp"
 )
 
 #-----------------------------------------------------------------------
@@ -77,28 +77,34 @@ add_executable ("tests"
 	
 	"ylib/y_lockfree.hpp"
 	
-	"ylib/y_json.h"
-	"ylib/y_json.cpp"
+	"experimental/y_json_1.h"
+	"experimental/y_json_1.cpp"
 	
-	"ylib/y_ring_allocator.hpp"
-	"ylib/y_ring_allocator.cpp"
+	"experimental/y_ring_allocator.hpp"
+	"experimental/y_ring_allocator.cpp"
 	"tests/tests_ring_allocator.cpp"
 
-	"ylib/y_array.hpp"
+	"experimental/y_array.hpp"
 	"tests/tests_array.cpp"
 
-	"ylib/y_map.hpp"
+	"experimental/y_map.hpp"
 	"tests/tests_map.cpp"
 	
-	"ylib/y_stats.hpp"
+	"experimental/y_stats.hpp"
 	"tests/tests_stats.cpp"
 	
-	"ylib/y_profiler.h"
-	"ylib/y_profiler.cpp"
+	"experimental/y_profiler.h"
+	"experimental/y_profiler.cpp"
 	"tests/tests_profiler.cpp"
 	
 	"ylib/y_basics.hpp"
 	"tests/tests_basics.cpp"
+	
+	"experimental/y_format.hpp"
+	"tests/tests_format.cpp"
+	
+	"experimental/y_string.hpp"
+	"tests/tests_string.cpp"
 )
 
 #-----------------------------------------------------------------------
