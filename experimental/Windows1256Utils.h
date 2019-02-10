@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cassert>
-
 typedef unsigned UnicodeChar;
 typedef unsigned SizeType;
 
@@ -15,7 +13,6 @@ inline UTF8Char_ReadResult ReadChar_UTF8 (char const * utf8_str) {
     UTF8Char_ReadResult ret = {};
     if (utf8_str) {
         unsigned char c = static_cast<unsigned char>(utf8_str[ret.read_bytes++]);
-
         ret.valid = true;
         int remaining_bytes = 0;
         if (c <= 0x7F) {
@@ -34,7 +31,6 @@ inline UTF8Char_ReadResult ReadChar_UTF8 (char const * utf8_str) {
         } else {
             ret.valid = false;
         } 
-
         for (int i = 0; i < remaining_bytes; ++i) {
             unsigned char next = static_cast<unsigned char>(utf8_str[ret.read_bytes++]);
             assert((next & 0xC0) == 0x80);
@@ -49,7 +45,6 @@ struct UTF8Char_WriteResult {
     bool succeeded;         // Succeeded in writing or not (enough room, etc.)
     unsigned wrote_bytes;   // How many bytes did we write?
 };
-
 inline UTF8Char_WriteResult WriteChar_UTF8 (char * out_utf8_ptr, SizeType size_bytes, UnicodeChar char_code) {
     UTF8Char_WriteResult ret = {};
     if (out_utf8_ptr) {
@@ -103,7 +98,6 @@ inline UnicodeChar ConvChar_from_Windows1256 (char windows1256_char) {
 /*224*/ 0x00E0, 0x0644, 0x00E2, 0x0645, 0x0646, 0x0647, 0x0648, 0x00E7, 0x00E8, 0x00E9, 0x00EA, 0x00EB, 0x0649, 0x064A, 0x00EE, 0x00EF,
 /*240*/ 0x064B, 0x064C, 0x064D, 0x064E, 0x00F4, 0x064F, 0x0650, 0x00F7, 0x0651, 0x00F9, 0x0652, 0x00FB, 0x00FC, 0x200E, 0x200F, 0x06D2,
     };
-
     return (windows1256_char < 128)
         ? windows1256_char
         : windows1256_to_unicode_upper_half[unsigned(windows1256_char) - 128];
@@ -143,7 +137,6 @@ inline Windows1256Char_ConvResult ConvChar_to_Windows1256 (UnicodeChar unicode_c
         {0x2014, 151}, {0x2018, 145}, {0x2019, 146}, {0x201A, 130}, {0x201C, 147}, {0x201D, 148}, {0x201E, 132}, {0x2020, 134},
         {0x2021, 135}, {0x2022, 149}, {0x2026, 133}, {0x2030, 137}, {0x2039, 139}, {0x203A, 155}, {0x20AC, 128}, {0x2122, 153},
     };
-
     Windows1256Char_ConvResult ret = {};
     if (unicode_char < 128) {
         ret.valid = true;
@@ -216,7 +209,7 @@ inline SizeType ConvStr_UTF8_to_Windows1256 (char * out_windows1256_str, SizeTyp
     return ret;
 }
 
-// Returns number of BYTES, no chars. Also, doesn't count the NUL at the end.
+// Returns number of BYTES, not chars. Also, doesn't count the NUL at the end.
 inline SizeType ConvStr_Windows1256_to_UTF8 (char * out_utf8_str, SizeType utf8_size_bytes, char const * in_windows1256_str, SizeType windows1256_size_bytes) {
     SizeType ret = 0;
     if (in_windows1256_str && windows1256_size_bytes > 0 && out_utf8_str && utf8_size_bytes > 0) {
