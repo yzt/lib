@@ -53,8 +53,8 @@ add_executable ("example_lockfreequeue"
 add_executable ("example_json"
 	"experimental/example_json.cpp"
 
-	"experimental/y_json_1.h"
-	"experimental/y_json_1.cpp"
+	"experimental/y_json.h"
+	"experimental/y_json.cpp"
 )
 
 #-----------------------------------------------------------------------
@@ -77,8 +77,9 @@ add_executable ("tests"
 	
 	"ylib/y_lockfree.hpp"
 	
-	"experimental/y_json_1.h"
-	"experimental/y_json_1.cpp"
+	"experimental/y_json.h"
+	"experimental/y_json.cpp"
+    "tests/tests_json.cpp"
 	
 	"experimental/y_ring_allocator.hpp"
 	"experimental/y_ring_allocator.cpp"

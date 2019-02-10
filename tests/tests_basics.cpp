@@ -1,5 +1,5 @@
 
-#include "y_basics.hpp"
+#include <y_basics.hpp>
 #include "catch.hpp"
 
 TEST_CASE("Basics Basics 1", "[basics]") {

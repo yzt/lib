@@ -1,5 +1,5 @@
 
-#include "y_array.hpp"
+#include "../experimental/y_array.hpp"
 #include "catch.hpp"
 
 #include <algorithm>
