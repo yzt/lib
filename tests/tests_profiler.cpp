@@ -1,4 +1,4 @@
 
-#include "y_profiler.h"
+#include "../experimental/y_profiler.h"
 #include "catch.hpp"
 

@@ -1,5 +1,5 @@
 
-#include "y_stats.hpp"
+#include "../experimental/y_stats.hpp"
 #include "catch.hpp"
 
 #include <cmath>

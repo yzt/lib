@@ -1,5 +1,5 @@
 //#define DISABLE_PROFILING
-#include "y_profiler.h"
+#include "../experimental/y_profiler.h"
 
 #include <algorithm>
 #include <chrono>
