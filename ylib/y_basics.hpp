@@ -159,7 +159,7 @@
 //----------------------------------------------------------------------
 
 #define Y_STATIC_ASSERT(cond, msg)          static_assert(cond, msg)
-#define Y_STATIC_ASSERT_SIZE(T, sz)         Y_STATIC_ASSERT(sizeof(T) == sz, "[Y] Size of " Y_STRINGIZE(T) " is expected to be " Y_STRINGIZE(sz) ".")
+#define Y_STATIC_ASSERT_SIZE(T, sz)         Y_STATIC_ASSERT(sizeof(T) == sz, "[Y] Size of " Y_STRINGIZE(T) " is expected to be \"" Y_STRINGIZE(sz) "\" bytes.")
 
 #if defined(Y_OPT_STD_TYPETRAITS)
     #define Y_STATIC_ASSERT_POD(T)          Y_STATIC_ASSERT(std::is_pod_v<T>, "[Y] Type " Y_STRINGIZE(T) " should be a POD.")
@@ -893,6 +893,7 @@ private:
 
 private:
     union {
+        char m__reserved_dummy;
         T m_value;
     };
     bool m_has_value = false;
@@ -949,6 +950,9 @@ struct Pair {
     //}
 };
 
+template <typename T0, typename T1> Pair (T0 const &, T1 const &) -> Pair<RemoveRef<T0>, RemoveRef<T1>>;
+template <typename T0, typename T1> Pair (T0 &&, T1 &&) -> Pair<RemoveRef<T0>, RemoveRef<T1>>;
+
 //----------------------------------------------------------------------
 
 template <typename T0, typename T1, typename T2>
@@ -992,6 +996,11 @@ struct Triplet {
             return first < that.first;
     }
 };
+
+template <typename T0, typename T1, typename T2>
+Triplet (T0 const &, T1 const &, T2 const &) -> Triplet<RemoveRef<T0>, RemoveRef<T1>, RemoveRef<T2>>;
+template <typename T0, typename T1, typename T2>
+Triplet (T0 &&, T1 &&, T2 &&) -> Triplet<RemoveRef<T0>, RemoveRef<T1>, RemoveRef<T2>>;
 
 //======================================================================
 //======================================================================

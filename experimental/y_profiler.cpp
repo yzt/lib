@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
+#include <vector>
 using namespace std::chrono_literals;
 
 //#if defined(_WIN32)
