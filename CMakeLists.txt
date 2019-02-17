@@ -106,6 +106,14 @@ add_executable ("tests"
 	
 	"experimental/y_string.hpp"
 	"tests/tests_string.cpp"
+	
+	"experimental/y_bignum.hpp"
+	"experimental/y_bignum.cpp"
+	"tests/tests_bignum.cpp"
+	
+	"experimental/y_socket.hpp"
+	"experimental/y_socket.cpp"
+	"tests/tests_socket.cpp"
 )
 
 #-----------------------------------------------------------------------

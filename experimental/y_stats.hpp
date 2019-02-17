@@ -12,7 +12,8 @@ public:
     SampleType min () const {return m_min;}
     SampleType max () const {return m_max;}
     AggregateType sum () const {return m_sum;}
-    AggregateType mean () const {return (m_count != 0) ? (m_sum / m_count) : 0;}
+    //AggregateType mean () const {return (m_count != 0) ? (m_sum / m_count) : NAN;}
+    AggregateType mean () const {return m_sum / m_count;}
 
     void addSample (SampleType sample) {
         ++m_count;

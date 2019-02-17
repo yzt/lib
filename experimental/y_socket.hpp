@@ -1,41 +1,38 @@
-//**********************************************************************
-// This file is part of Fanafzar's Oni project. You have no right to it.
-//**********************************************************************
 #pragma once
 //======================================================================
 
-#include "oni_lib_basics.hpp"
+#include "y_basics.hpp"
 
 //======================================================================
 
-#if defined(ONI_FEATURE_OS_WIN)
+#if defined(Y_FEATURE_OS_WIN)
     #define _WINSOCK_DEPRECATED_NO_WARNINGS
     #include <ws2tcpip.h>
     #include <WinSock2.h>
     #include <Windows.h>
-    #define ONI_SOCKET_ERROR__WOULD_BLOCK   WSAEWOULDBLOCK
-    #if ONI_FEATURE_COMPILER_MSVC
+    #define Y_SOCKET_ERROR__WOULD_BLOCK     WSAEWOULDBLOCK
+    #if Y_FEATURE_COMPILER_MSVC
         #pragma comment (lib, "ws2_32")
     #endif
-#elif defined(ONI_FEATURE_OS_POSIX)
+#elif defined(Y_FEATURE_OS_POSIX)
     #define <sys/socket.h>
     #define <netinet/in.h>
     typedef size_t SOCKET;
     #define INVALID_SOCKET                  (~0)
     #define closesocket(s)                  close(s)
-    #define ONI_SOCKET_ERROR__WOULD_BLOCK   EWOULDBLOCK     // ?
+    #define Y_SOCKET_ERROR__WOULD_BLOCK     EWOULDBLOCK     // ?
 #else
     #error "What is this?!"
 #endif
 
 //======================================================================
 
-namespace Oni {
+namespace y {
     namespace Socket {
 
 //======================================================================
 
-#if defined(ONI_FEATURE_OS_WIN)
+#if defined(Y_FEATURE_OS_WIN)
     inline int Initialize () {::WSAData data = {}; return ::WSAStartup(MAKEWORD(2, 2), &data);}
     inline int Cleanup () {return ::WSACleanup();}
     inline int GetTheError () {return ::WSAGetLastError();}
@@ -72,8 +69,8 @@ enum class Error {
 
 //----------------------------------------------------------------------
 
-struct Exception : Oni::Exception {
-    Exception (Error err, char const * msg) : Oni::Exception(msg), error (err), platform_error_code (GetTheError()) {}
+struct Exception : y::Exception {
+    Exception (Error err, char const * msg) : y::Exception(msg), error (err), platform_error_code (GetTheError()) {}
 
     Error error;
     int platform_error_code;
@@ -90,7 +87,7 @@ public:
 //======================================================================
 
 struct Address {
-    static Address IPv4 (u32 ip, u16 port) {
+    static Address IPv4 (U32 ip, U16 port) {
         Address ret = {};
         auto in = ret.asIPv4();
         in->sin_family = AF_INET;
@@ -98,7 +95,7 @@ struct Address {
         in->sin_addr.s_addr = ::htonl(ip);
         return ret;
     }
-    static Address IPv4 (char const * dotted_ip, u16 port) {
+    static Address IPv4 (char const * dotted_ip, U16 port) {
         Address ret = {};
         auto in = ret.asIPv4();
         in->sin_family = AF_INET;
@@ -106,7 +103,7 @@ struct Address {
         in->sin_addr.s_addr = ::inet_addr(dotted_ip);   // NOTE(yzt): So sue me!
         return ret;
     }
-    //static Address IPv4FromHostName (char const * host_name, u16 port) {
+    //static Address IPv4FromHostName (char const * host_name, U16 port) {
     //    Address ret = {};
     //    auto in = ret.asIPv4();
     //    in->sin_family = AF_INET;
@@ -115,7 +112,7 @@ struct Address {
     //    in->sin_addr.s_addr = ...;
     //    return ret;
     //}
-    static Address IPv4Any (u16 port) {
+    static Address IPv4Any (U16 port) {
         Address ret = {};
         auto in = ret.asIPv4();
         in->sin_family = AF_INET;
@@ -123,7 +120,7 @@ struct Address {
         in->sin_addr.s_addr = ::htonl(INADDR_ANY);
         return ret;
     }
-    static Address IPv4Loopback (u16 port) {
+    static Address IPv4Loopback (U16 port) {
         Address ret = {};
         auto in = ret.asIPv4();
         in->sin_family = AF_INET;
@@ -142,12 +139,12 @@ struct Address {
     sockaddr_in6 * asIPv6 () {return reinterpret_cast<sockaddr_in6 *>(&m_storage);}
 
     ADDRESS_FAMILY family () const {return m_storage.ss_family;}
-    u16 port () const {return ::ntohs(asIPv4()->sin_port);}
-    u32 ipv4 () const {return ::ntohl(asIPv4()->sin_addr.s_addr);}
+    U16 port () const {return ::ntohs(asIPv4()->sin_port);}
+    U32 ipv4 () const {return ::ntohl(asIPv4()->sin_addr.s_addr);}
     char const * ipv4str () const {return ::inet_ntoa(asIPv4()->sin_addr);}
 
     friend bool operator == (Address const & a, Address const & b) {
-        ONI_ASSERT(a.family() == AF_INET && b.family() == AF_INET);
+        Y_ASSERT(a.family() == AF_INET && b.family() == AF_INET);
         return a.family() == b.family() && a.ipv4() == b.ipv4() && a.port() == b.port();
     }
 private:
@@ -160,7 +157,7 @@ class UDP {
 public:
     struct Config {
         Address bind_address;
-        u32 recv_buffer_size;
+        U32 recv_buffer_size;
     };
 
     enum class SendResult {
@@ -199,11 +196,11 @@ public:
         if (0 != ::bind(m_sock, m_cfg.bind_address.ptr(), m_cfg.bind_address.len()))
             throw Exception{Error::SocketBind, "bind() failed."};
 
-        m_recv_buf.used = 0;
         m_recv_buf.ptr = reinterpret_cast<byte *>(::malloc(m_cfg.recv_buffer_size));
-        if (!ONI_PTR_VALID(m_recv_buf.ptr))
+        m_recv_buf.end = m_recv_buf.ptr;
+        if (!Y_PTR_VALID(m_recv_buf.ptr))
             throw Exception{Error::NoMem, "Couldn't allocate memory for recv buffer."};
-        m_recv_buf.capacity = m_cfg.recv_buffer_size;
+        m_recv_buf.cap = m_recv_buf.ptr + m_cfg.recv_buffer_size;
     }
 
     ~UDP () noexcept {
@@ -223,21 +220,24 @@ public:
 
     bool recvNext () {
         m_has_received_msg = false;
-        m_recv_buf.used = 0;
+        m_recv_buf.end = m_recv_buf.ptr;
         m_last_error = 0;
 
         int peer_addr_len = m_recv_peer.len();
-        int r = ::recvfrom(m_sock, (char *)m_recv_buf.ptr, int(m_recv_buf.capacity), 0, m_recv_peer.ptr(), &peer_addr_len);
+        int r = ::recvfrom(m_sock,
+            (char *)m_recv_buf.ptr, int(m_recv_buf.capacity()), 0,
+            m_recv_peer.ptr(), &peer_addr_len
+        );
 
         if (r < 0) {
-            ONI_ASSERT(SOCKET_ERROR == r);
+            Y_ASSERT(SOCKET_ERROR == r);
             auto err = GetTheError();
-            if (ONI_SOCKET_ERROR__WOULD_BLOCK != err)
+            if (Y_SOCKET_ERROR__WOULD_BLOCK != err)
                 m_last_error = err;
             return false;
         } else {    // Actually received some data...
             m_has_received_msg = true;
-            m_recv_buf.used = unsigned(r);
+            m_recv_buf.end = m_recv_buf.ptr + unsigned(r);
             return true;
         }
     }
@@ -256,14 +256,14 @@ public:
     SendResult send (Address const & dest, Buffer const & msg) {
         m_last_error = 0;
 
-        int r = ::sendto(m_sock, (char const *)msg.ptr, int(msg.used), 0, dest.ptr(), dest.len());
+        int r = ::sendto(m_sock, (char const *)msg.ptr, int(msg.size()), 0, dest.ptr(), dest.len());
 
-        if (r == int(msg.used)) {
+        if (r == int(msg.size())) {
             return SendResult::Success;
         } else if (r < 0) {
-            ONI_ASSERT(r == SOCKET_ERROR);
+            Y_ASSERT(r == SOCKET_ERROR);
             auto err = GetTheError();
-            if (err == ONI_SOCKET_ERROR__WOULD_BLOCK) {
+            if (err == Y_SOCKET_ERROR__WOULD_BLOCK) {
                 return SendResult::TryAgainLater;
             } else {
                 m_last_error = err;
