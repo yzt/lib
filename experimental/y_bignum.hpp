@@ -23,13 +23,13 @@ typedef struct {
     y_bignum_dig_t * digs;
     int size;
     //int shift;
-    //int sign;
+    bool negative;
 } y_bignum_num_t;
 
 
 bool y_bignum_alloc (y_bignum_num_t * num, int capacity_in_words, bool clear_to_zero);
 bool y_bignum_realloc (y_bignum_num_t * num, int new_capacity_in_words, bool clear_to_zero);
-void y_bignum_free (y_bignum_dig_t digs);
+void y_bignum_free (y_bignum_num_t * num);
 
 bool y_bignum_copy (y_bignum_num_t * dst, y_bignum_num_t const * src);
 void y_bignum_trim (y_bignum_num_t * num, bool free_excess_memory);
@@ -38,6 +38,12 @@ void y_bignum_trim (y_bignum_num_t * num, bool free_excess_memory);
 bool y_bignum_init (y_bignum_num_t * num, y_bignum_dig_t v);
 //bool y_bignum_init (y_bignum_num_t * num, y_bignum_num_t const * src);
 //bool y_bignum_init (y_bignum_num_t * num, char const * decimal_number_str);
+
+bool y_bignum_negate (y_bignum_num_t * num);
+bool y_bignum_set_sign (y_bignum_num_t * num, bool negative);
+
+bool y_bignum_add_unsigned (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b);
+bool y_bignum_sub_unsigned (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b);
 
 bool y_bignum_add (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b);
 bool y_bignum_sub (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b);

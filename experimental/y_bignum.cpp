@@ -46,6 +46,20 @@ dig_count (y_bignum_num_t const * num) {
     return ret;
 }
 
+static inline bool
+is_negative (y_bignum_num_t const * num) {
+    bool ret = false;
+    if (num)
+        ret = num->negative;
+    return ret;
+}
+
+static inline void
+set_sign (y_bignum_num_t * num, bool negative) {
+    if (num)
+        num->negative = negative;
+}
+
 struct ResultAndCarry {
     y_bignum_dig_t result, carry;
 };
@@ -100,6 +114,7 @@ bool y_bignum_init (y_bignum_num_t * num, y_bignum_dig_t v) {
     bool ret = false;
     if (num) {
         y_bignum_realloc(num, 1, false);
+        num->negative = false;
         set_dig(num, 0, v);
         ret = true;
     }
@@ -109,7 +124,25 @@ bool y_bignum_init (y_bignum_num_t * num, y_bignum_dig_t v) {
 //bool y_bignum_init (y_bignum_num_t * num, y_bignum_num_t const * src);
 //bool y_bignum_init (y_bignum_num_t * num, char const * decimal_number_str);
 
-bool y_bignum_add (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b) {
+bool y_bignum_negate (y_bignum_num_t * num) {
+    bool ret = false;
+    if (num) {
+        num->negative = !num->negative;
+        ret = true;
+    }
+    return ret;
+}
+
+bool y_bignum_set_sign (y_bignum_num_t * num, bool negative) {
+    bool ret = false;
+    if (num) {
+        num->negative = negative;
+        ret = true;
+    }
+    return ret;
+}
+
+bool y_bignum_add_unsigned (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b) {
     bool ret = false;
     int acnt = dig_count(a);
     int bcnt = dig_count(b);
@@ -141,13 +174,61 @@ bool y_bignum_add (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_
             }
             for (; i < rcnt; ++i)
                 set_dig(res, i, 0);
+            y_bignum_set_sign(res, false);
             ret = true;
         }
     }
     return ret;
 }
 
-bool y_bignum_sub (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b);
+bool y_bignum_sub_unsigned (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b) {
+    bool ret = false;
+    
+    return ret;
+}
+
+bool y_bignum_add (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b) {
+    if (res && a && b) {
+        bool aneg = is_negative(a);
+        bool bneg = is_negative(b);
+        if (!aneg && !bneg)
+            return y_bignum_add_unsigned(res, a, b);
+        else if (!aneg && bneg)
+            return y_bignum_sub_unsigned(res, a, b);
+        else if (aneg && !bneg)
+            return y_bignum_sub_unsigned(res, b, a);
+        else //if (aneg && bneg)
+            if (y_bignum_add_unsigned(res, a, b)) {
+                y_bignum_negate(res);
+                return true;
+            } else
+                return false;
+    } else {
+        return false;
+    }
+}
+
+bool y_bignum_sub (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b) {
+    if (res && a && b) {
+        bool aneg = is_negative(a);
+        bool bneg = is_negative(b);
+        if (!aneg && !bneg)
+            return y_bignum_sub_unsigned(res, a, b);
+        else if (!aneg && bneg)
+            return y_bignum_add_unsigned(res, a, b);
+        else if (aneg && !bneg)
+            if (y_bignum_add_unsigned(res, a, b)) {
+                y_bignum_negate(res);
+                return true;
+            } else
+                return false;
+        else //if (aneg && bneg)
+            return y_bignum_sub_unsigned(res, b, a);
+    } else {
+        return false;
+    }
+}
+
 bool y_bignum_mul (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b);
 bool y_bignum_div (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b);
 bool y_bignum_mod (y_bignum_num_t * res, y_bignum_num_t const * a, y_bignum_num_t const * b);
