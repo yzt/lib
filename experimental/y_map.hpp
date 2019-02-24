@@ -77,10 +77,10 @@ public:
     bool has (H hash) const {
     }
 
-    bool has (K const & key, H hash_value) const {
+    bool has (H hash_value, K const & key) const {
     }
 
-    bool insert (K key, H hash, V value) {  // fails if key already exists
+    bool insert (H hash, K key, V value) {  // fails if key already exists
     }
 
     bool update (H hash, K const & key, V value) {  // fails if key doesn't exist
