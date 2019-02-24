@@ -127,6 +127,8 @@
 #define _Y_CONCAT_DO(x, y)          x ## y
 #define Y_CONCAT(x, y)              _Y_CONCAT_DO(x, y)
 
+#define Y_UNIQUE_NAME(base)         Y_CONCAT(base, __COUNTER__)
+
 //----------------------------------------------------------------------
 
 #define Y_PTR_VALID(p)              ((p) != nullptr)
@@ -153,6 +155,22 @@
 #endif
 
 #define Y_DEFAULT_CASE_UNREACHABLE()    default: Y_UNREACHABLE(); break
+
+//----------------------------------------------------------------------
+
+#if !defined(Y_FEATURE_MSVC_IS_OLD)
+    #define Y_UNUSED                [[maybe_unused]]
+#else
+    #define Y_UNUSED                /**/
+#endif
+
+//======================================================================
+// Deferement:
+//----------------------------------------------------------------------
+// Use like this:     Y_DEFER {  ..anything you want happen at the end of scope...  };
+//----------------------------------------------------------------------
+
+#define Y_DEFER     ::y::_details::RunAtDestructionTime Y_UNIQUE_NAME(deferer_var_) = [&]()
 
 //======================================================================
 // Assertions:
@@ -1002,6 +1020,25 @@ Triplet (T0 const &, T1 const &, T2 const &) -> Triplet<RemoveRef<T0>, RemoveRef
 template <typename T0, typename T1, typename T2>
 Triplet (T0 &&, T1 &&, T2 &&) -> Triplet<RemoveRef<T0>, RemoveRef<T1>, RemoveRef<T2>>;
 
+//======================================================================
+
+namespace _details {
+
+template <typename F>
+class RunAtDestructionTime {
+public:
+    RunAtDestructionTime (F && f) : m_f (Mov(f)) {}
+    ~RunAtDestructionTime () {m_f();}
+private:
+    F m_f;
+};
+
+template <typename F>
+RunAtDestructionTime (F &&) -> RunAtDestructionTime<F>;
+
+}   // namespace _details
+
+//----------------------------------------------------------------------
 //======================================================================
 //======================================================================
 
