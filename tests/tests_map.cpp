@@ -14,6 +14,5 @@ TEST_CASE("Map Construction", "[map]") {
     REQUIRE(map.capacity() == Cap);
     REQUIRE(map.count() == 0);
 
-
 //    y::Map_Clear(map);
 }
