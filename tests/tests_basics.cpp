@@ -17,3 +17,15 @@ TEST_CASE("Basics Basics 1", "[basics]") {
     y::Pair p (3, 3.2f);
     y::Triplet t (p, -1, false);
 }
+
+TEST_CASE("Basics Defer 1", "[basics]") {
+    int test = 0;
+    {
+        Y_DEFER {REQUIRE(test == 3); test += 4;};
+        Y_DEFER {REQUIRE(test == 1); test += 2;};
+        REQUIRE(test == 0);
+        test += 1;
+        REQUIRE(test == 1);
+    }
+    REQUIRE(test == 7);
+}

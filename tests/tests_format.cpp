@@ -21,3 +21,18 @@ TEST_CASE("C-str to C-str 02", "[fmt]") {
     REQUIRE(buffer[r - 1] == '\0');
     REQUIRE("Hello, wo"s == buffer);
 }
+
+TEST_CASE("C-str to C-str 03", "[fmt]") {
+    char buffer [100];
+    auto r = y::fmt::c2c(buffer, sizeof(buffer), "Hello, {{world}!");
+    REQUIRE(r == 16);
+    REQUIRE(buffer[r - 2] != '\0');
+    REQUIRE(buffer[r - 1] == '\0');
+    REQUIRE("Hello, {world}!"s == buffer);
+
+    r = y::fmt::c2c(buffer, sizeof(buffer), "Hello, {}!", "Kevin");
+    REQUIRE(r == 14);
+    REQUIRE(buffer[r - 2] != '\0');
+    REQUIRE(buffer[r - 1] == '\0');
+    REQUIRE("Hello, [arg]!"s == buffer);
+}

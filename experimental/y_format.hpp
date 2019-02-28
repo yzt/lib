@@ -23,7 +23,7 @@ enum class Err {
 
 template <typename OutF, typename T>
 inline bool EmitValue (OutF && out, T && v) {
-    for (auto c : "[arg]")
+    for (auto c : "[arg]"s)
         out(c);
     return true;
 }
