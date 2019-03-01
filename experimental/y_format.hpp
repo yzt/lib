@@ -1,6 +1,18 @@
 #pragma once
 
+//======================================================================
+
+#define Y_OPT_FMT_SUPPORT_STD_STRING
+#define Y_OPT_FMT_MAX_REAL_NUM_CHAR_SIZE    100
+
+//======================================================================
+
 #include <utility>  // std::forward
+#if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+    #include <string>
+    #include <string_view>
+#endif
+#include <charconv> // std::to_chars() for float/double/long double
 
 //======================================================================
 /* The format string has the following format:
@@ -28,13 +40,93 @@ struct Flags {
 //----------------------------------------------------------------------
 
 template <typename OutF>
-void ToStr (OutF && out, char const * v, Flags flags) {
+void ToStr (OutF && out, char const * v/*, Flags flags*/) {
     if (v) {
         while (*v)
             out(*v++);
     } else {
         out('('); out('n'); out('u'); out('l'); out('l'); out(')');
     }
+}
+
+#if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+template <typename OutF, typename C>
+void ToStr (OutF && out, std::basic_string<C> const & v) {
+    for (auto c : v)
+        out(c);
+}
+
+template <typename OutF, typename C>
+void ToStr (OutF && out, std::basic_string_view<C> const & v) {
+    for (auto c : v)
+        out(c);
+}
+#endif
+
+template <typename OutF>
+void ToStr (OutF && out, unsigned long long v) {
+    int cnt = 0;
+    char buffer [20];
+    do {
+        buffer[cnt++] = '0' + (v % 10);
+        v /= 10;
+    } while (v > 0);
+    for (int i = cnt - 1; i >= 0; --i)
+        out(buffer[i]);
+}
+
+template <typename OutF>
+void ToStr (OutF && out, signed long long v) {
+    if (v >= 0) {
+        return ToStr(std::forward<OutF>(out), (unsigned long long)(v));
+    } else {
+        out('-');
+        return ToStr(std::forward<OutF>(out), (unsigned long long)(-v));
+    }
+}
+
+template <typename OutF>
+void ToStr (OutF && out, unsigned int v) {return ToStr(std::forward<OutF>(out), (unsigned long long)(v));}
+template <typename OutF>
+void ToStr (OutF && out, signed int v) {return ToStr(std::forward<OutF>(out), (signed long long)(v));}
+
+template <typename OutF>
+void ToStr (OutF && out, unsigned short v) {return ToStr(std::forward<OutF>(out), (unsigned long long)(v));}
+template <typename OutF>
+void ToStr (OutF && out, signed short v) {return ToStr(std::forward<OutF>(out), (signed long long)(v));}
+
+template <typename OutF>
+void ToStr (OutF && out, unsigned char v) {return ToStr(std::forward<OutF>(out), (unsigned long long)(v));}
+template <typename OutF>
+void ToStr (OutF && out, signed char v) {out(v);}
+template <typename OutF>
+void ToStr (OutF && out, char v) {out(v);}
+
+template <typename OutF>
+void ToStr (OutF && out, bool v) {out(v ? '1' : '0');}
+
+template <typename OutF>
+void ToStr (OutF && out, float v) {
+    char buffer [Y_OPT_FMT_MAX_REAL_NUM_CHAR_SIZE];
+    auto res = std::to_chars(buffer, buffer + sizeof(buffer), v);
+    for (char const * p = buffer; p != res.ptr; ++p)
+        out(*p);
+}
+
+template <typename OutF>
+void ToStr (OutF && out, double v) {
+    char buffer [Y_OPT_FMT_MAX_REAL_NUM_CHAR_SIZE];
+    auto res = std::to_chars(buffer, buffer + sizeof(buffer), v);
+    for (char const * p = buffer; p != res.ptr; ++p)
+        out(*p);
+}
+
+template <typename OutF>
+void ToStr (OutF && out, long double v) {
+    char buffer [Y_OPT_FMT_MAX_REAL_NUM_CHAR_SIZE];
+    auto res = std::to_chars(buffer, buffer + sizeof(buffer), v);
+    for (char const * p = buffer; p != res.ptr; ++p)
+        out(*p);
 }
 
 //----------------------------------------------------------------------
@@ -59,7 +151,7 @@ inline bool EmitValue (OutF && out, T && v) {
     //for (auto c : "[arg]"s)
     //    out(c);
     //return true;
-    cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v), {});
+    cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v)/*, {}*/);
     return true;
 }
 
@@ -73,32 +165,65 @@ inline bool EmitArg (unsigned /*idx*/, ErrF && err, OutF && out, InF && in) {
 
 template <typename ErrF, typename OutF, typename InF, typename ArgType0>
 inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0) {
-    if (0 == idx) return EmitValue(std::forward<OutF>(out), std::forward<ArgType0>(arg0));
-    else {err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;}
+    switch (idx) {
+    case  0: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType0>(arg0)); return true;
+    default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
+    }
 }
 
 template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1>
 inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1) {
-    if (0 == idx) return EmitValue(std::forward<OutF>(out), std::forward<ArgType0>(arg0));
-    else if (1 == idx) return EmitValue(std::forward<OutF>(out), std::forward<ArgType1>(arg1));
-    else {err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;}
+    switch (idx) {
+    case  0: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType0>(arg0)); return true;
+    case  1: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType1>(arg1)); return true;
+    default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
+    }
 }
 
 template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2>
-inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType1 && arg2) {
-    if (0 == idx) return EmitValue(std::forward<OutF>(out), std::forward<ArgType0>(arg0));
-    else if (1 == idx) return EmitValue(std::forward<OutF>(out), std::forward<ArgType1>(arg1));
-    else if (2 == idx) return EmitValue(std::forward<OutF>(out), std::forward<ArgType2>(arg2));
-    else {err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;}
+inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2) {
+    switch (idx) {
+    case  0: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType0>(arg0)); return true;
+    case  1: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType1>(arg1)); return true;
+    case  2: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType2>(arg2)); return true;
+    default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
+    }
 }
 
-template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2, typename ArgType3, typename ... ArgTypes>
-inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType1 && arg2, ArgType1 && arg3, ArgTypes && ... args) {
-    if (0 == idx) return EmitValue(std::forward<OutF>(out), std::forward<ArgType0>(arg0));
-    else if (1 == idx) return EmitValue(std::forward<OutF>(out), std::forward<ArgType1>(arg1));
-    else if (2 == idx) return EmitValue(std::forward<OutF>(out), std::forward<ArgType2>(arg2));
-    else if (3 == idx) return EmitValue(std::forward<OutF>(out), std::forward<ArgType2>(arg3));
-    else return EmitArg(idx - 4, std::forward<ErrF>(err), std::forward<OutF>(out), std::forward<InF>(in), std::forward<ArgTypes>(args)...);
+template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2, typename ArgType3>
+inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2, ArgType3 && arg3) {
+    switch (idx) {
+    case  0: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType0>(arg0)); return true;
+    case  1: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType1>(arg1)); return true;
+    case  2: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType2>(arg2)); return true;
+    case  3: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType3>(arg3)); return true;
+    default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
+    }
+}
+
+template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2, typename ArgType3, typename ArgType4>
+inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2, ArgType3 && arg3, ArgType4 && arg4) {
+    switch (idx) {
+    case  0: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType0>(arg0)); return true;
+    case  1: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType1>(arg1)); return true;
+    case  2: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType2>(arg2)); return true;
+    case  3: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType3>(arg3)); return true;
+    case  4: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType4>(arg4)); return true;
+    default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
+    }
+}
+
+template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2, typename ArgType3, typename ArgType4, typename ArgType5, typename ... ArgTypes>
+inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2, ArgType3 && arg3, ArgType4 && arg4, ArgType5 && arg5, ArgTypes && ... args) {
+    switch (idx) {
+    case  0: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType0>(arg0)); return true;
+    case  1: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType1>(arg1)); return true;
+    case  2: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType2>(arg2)); return true;
+    case  3: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType3>(arg3)); return true;
+    case  4: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType4>(arg4)); return true;
+    case  5: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType5>(arg5)); return true;
+    default: return EmitArg(idx - 6, std::forward<ErrF>(err), std::forward<OutF>(out), std::forward<InF>(in), std::forward<ArgTypes>(args)...);
+    }
 }
 
 //----------------------------------------------------------------------
