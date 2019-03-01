@@ -34,5 +34,5 @@ TEST_CASE("C-str to C-str 03", "[fmt]") {
     REQUIRE(r == 14);
     REQUIRE(buffer[r - 2] != '\0');
     REQUIRE(buffer[r - 1] == '\0');
-    REQUIRE("Hello, [arg]!"s == buffer);
+    REQUIRE("Hello, Kevin!"s == buffer);
 }

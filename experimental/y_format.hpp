@@ -14,6 +14,36 @@ namespace y {
 
 //======================================================================
 
+        namespace cvt {
+
+//----------------------------------------------------------------------
+//----------------------------------------------------------------------
+
+struct Flags {
+};
+
+//template <typename OutF, typename T>
+//void ToStr (OutF && out, T const & v, Flags flags);
+
+//----------------------------------------------------------------------
+
+template <typename OutF>
+void ToStr (OutF && out, char const * v, Flags flags) {
+    if (v) {
+        while (*v)
+            out(*v++);
+    } else {
+        out('('); out('n'); out('u'); out('l'); out('l'); out(')');
+    }
+}
+
+//----------------------------------------------------------------------
+//----------------------------------------------------------------------
+
+        }   // namespace cvt
+
+//======================================================================
+
 enum class Err {
     AfterOpenBrace, // Expected '}' or '{' after open brace...
     TooFewArgs,
@@ -21,14 +51,19 @@ enum class Err {
 
 //======================================================================
 
+
+//----------------------------------------------------------------------
+
 template <typename OutF, typename T>
 inline bool EmitValue (OutF && out, T && v) {
-    for (auto c : "[arg]"s)
-        out(c);
+    //for (auto c : "[arg]"s)
+    //    out(c);
+    //return true;
+    cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v), {});
     return true;
 }
 
-//======================================================================
+//----------------------------------------------------------------------
 
 template <typename ErrF, typename OutF, typename InF>
 inline bool EmitArg (unsigned /*idx*/, ErrF && err, OutF && out, InF && in) {
