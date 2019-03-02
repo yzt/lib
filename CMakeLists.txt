@@ -101,7 +101,7 @@ add_executable ("tests"
 	"ylib/y_basics.hpp"
 	"tests/tests_basics.cpp"
 	
-	"experimental/y_format.hpp"
+	"ylib/y_format.hpp"
 	"tests/tests_format.cpp"
 	
 	"experimental/y_string.hpp"
