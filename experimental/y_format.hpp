@@ -2,17 +2,26 @@
 
 //======================================================================
 
-#define Y_OPT_FMT_SUPPORT_STD_STRING
-#define Y_OPT_FMT_MAX_REAL_NUM_CHAR_SIZE    100
+#define Y_OPT_FMT_SUPPORT_STDIO                     1
+#define Y_OPT_FMT_SUPPORT_IOSTREAM                  1
+#define Y_OPT_FMT_SUPPORT_STD_STRING                1
+#define Y_OPT_FMT_STD_STRING_OUTPUT_PRECALC_SIZE    1
+#define Y_OPT_FMT_MAX_REAL_NUM_CHAR_SIZE            100
 
 //======================================================================
 
 #include <utility>  // std::forward
+#include <charconv> // std::to_chars() for float/double/long double
 #if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
     #include <string>
     #include <string_view>
 #endif
-#include <charconv> // std::to_chars() for float/double/long double
+#if defined(Y_OPT_FMT_SUPPORT_STDIO)
+    #include <cstdio>
+#endif
+#if defined(Y_OPT_FMT_SUPPORT_IOSTREAM)
+    #include <ostream>
+#endif
 
 //======================================================================
 /* The format string has the following format:
@@ -25,10 +34,14 @@ namespace y {
     namespace fmt {
 
 //======================================================================
+//======================================================================
 
         namespace cvt {
 
 //----------------------------------------------------------------------
+
+inline constexpr char HexDigits [17] = "0123456789ABCDEF";
+
 //----------------------------------------------------------------------
 
 struct Flags {
@@ -116,7 +129,7 @@ void ToStr (OutF && out, float v) {
 template <typename OutF>
 void ToStr (OutF && out, double v) {
     char buffer [Y_OPT_FMT_MAX_REAL_NUM_CHAR_SIZE];
-    auto res = std::to_chars(buffer, buffer + sizeof(buffer), v);
+    auto res = std::to_chars(buffer, buffer + sizeof(buffer), int(v));
     for (char const * p = buffer; p != res.ptr; ++p)
         out(*p);
 }
@@ -129,6 +142,18 @@ void ToStr (OutF && out, long double v) {
         out(*p);
 }
 
+template <typename OutF>
+void ToStr (OutF && out, void const * v) {
+    constexpr unsigned shift_down = sizeof(v) * 8 - 8;
+    auto x = reinterpret_cast<uintptr_t>(v);
+    for (int i = 0; i < sizeof(v); ++i) {
+        uint8_t b = (x >> (sizeof(v) * 8 - 8)) & 0xFF;
+        out(HexDigits[(b >> 4) & 0x0F]);
+        out(HexDigits[(b >> 0) & 0x0F]);
+        x <<= 8;
+    }
+}
+
 //----------------------------------------------------------------------
 //----------------------------------------------------------------------
 
@@ -139,21 +164,23 @@ void ToStr (OutF && out, long double v) {
 enum class Err {
     AfterOpenBrace, // Expected '}' or '{' after open brace...
     TooFewArgs,
+    TooManyArgs,
 };
 
 //======================================================================
 
+        namespace _detail {
 
 //----------------------------------------------------------------------
 
-template <typename OutF, typename T>
-inline bool EmitValue (OutF && out, T && v) {
-    //for (auto c : "[arg]"s)
-    //    out(c);
-    //return true;
-    cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v)/*, {}*/);
-    return true;
-}
+//template <typename OutF, typename T>
+//inline bool EmitValue (OutF && out, T && v) {
+//    //for (auto c : "[arg]"s)
+//    //    out(c);
+//    //return true;
+//    cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v)/*, {}*/);
+//    return true;
+//}
 
 //----------------------------------------------------------------------
 
@@ -260,18 +287,47 @@ void Do (ErrF && err, OutF && out, InF && in, ArgTypes && ... args) {
                 break;
         }
     }
+    if (cur_arg != sizeof...(args))
+        err(Err::TooManyArgs, std::forward<OutF>(out), std::forward<InF>(in));
 }
+
+//----------------------------------------------------------------------
+
+template <typename OutF>
+auto UTF8inator (OutF && out) {
+    return [&] (auto c) {
+        if (c < 0x80) {
+            return out((unsigned char)(c));
+        } else if (c < 0x800) {
+            return out((unsigned char)(0b110'00000 | ((c >>  6) & 0b000'11111)))
+                && out((unsigned char)(0b10'000000 | ((c >>  0) & 0b00'111111)));
+        } else if (c < 0x10000) {
+            return out((unsigned char)(0b1110'0000 | ((c >> 12) & 0b0000'1111)))
+                && out((unsigned char)(0b10'000000 | ((c >>  6) & 0b00'111111)))
+                && out((unsigned char)(0b10'000000 | ((c >>  0) & 0b00'111111))); 
+        } else {    // if (c < 0x110000) {
+            return out((unsigned char)(0b11110'000 | ((c >> 18) & 0b00000'111)))
+                && out((unsigned char)(0b10'000000 | ((c >> 12) & 0b00'111111)))
+                && out((unsigned char)(0b10'000000 | ((c >>  6) & 0b00'111111)))
+                && out((unsigned char)(0b10'000000 | ((c >>  0) & 0b00'111111)));
+        }
+    };
+}
+
+//----------------------------------------------------------------------
+
+        }   // namespace _detail
 
 //======================================================================
 
 template <typename ... ArgTypes>
-unsigned c2c (char * buffer, unsigned size, char const * fmt, ArgTypes && ... args) {
+unsigned ToCStr (char * buffer, unsigned size, char const * fmt, ArgTypes && ... args) {
     unsigned ret = 0;
     if (buffer && size && fmt) {
         size -= 1;
-        Do(
+        _detail::Do(
             [](auto, auto, auto){},
-            [&](char c){if (ret < size) buffer[ret++] = c; return ret <= size;},
+            [&](auto c){if (ret < size) buffer[ret++] = c; return ret <= size;},
             [&]{return *fmt++;},
             std::forward<ArgTypes>(args)...
         );
@@ -280,6 +336,150 @@ unsigned c2c (char * buffer, unsigned size, char const * fmt, ArgTypes && ... ar
     return ret;
 }
 
+//----------------------------------------------------------------------
+
+#if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+template <typename ... ArgTypes>
+unsigned ToCStr (char * buffer, unsigned size, std::string const & fmt, ArgTypes && ... args) {
+    return ToCStr(buffer, size, fmt.c_str(), std::forward<ArgTypes>(args));
+}
+#endif  // defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+
+//----------------------------------------------------------------------
+
+#if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+template <typename ... ArgTypes>
+unsigned ToCStr (char * buffer, unsigned size, std::string_view const & fmt, ArgTypes && ... args) {
+    unsigned ret = 0;
+    if (buffer && size && fmt) {
+        size -= 1;
+        unsigned idx = 0;
+        _detail::Do(
+            [](auto, auto, auto){},
+            [&](auto c){if (ret < size) buffer[ret++] = c; return ret <= size;},
+            [&]{return (idx < fmt.size()) ? fmt[idx++] : '\0';},
+            std::forward<ArgTypes>(args)...
+        );
+        buffer[ret++] = '\0';
+    }
+    return ret;
+}
+#endif  // defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+
+//----------------------------------------------------------------------
+
+#if defined(Y_OPT_FMT_SUPPORT_STDIO)
+template <typename ... ArgTypes>
+unsigned ToFile (FILE * file, char const * fmt, ArgTypes && ... args) {
+    unsigned ret = 0;
+    if (file && fmt) {
+        _detail::Do(
+            [](auto, auto, auto){},
+            [&](auto c){return ::fputc(c, file) != EOF;},
+            [&]{return *fmt++;},
+            std::forward<ArgTypes>(args)...
+        );
+    }
+    return ret;
+}
+#endif  // defined(Y_OPT_FMT_SUPPORT_STDIO)
+
+//----------------------------------------------------------------------
+
+#if defined(Y_OPT_FMT_SUPPORT_STDIO)
+template <typename ... ArgTypes>
+unsigned ToConsole (char const * fmt, ArgTypes && ... args) {
+    return ToFile(stdout, fmt, std::forward<ArgTypes>(args)...);
+}
+#endif  // defined(Y_OPT_FMT_SUPPORT_STDIO)
+
+//----------------------------------------------------------------------
+
+#if defined(Y_OPT_FMT_SUPPORT_IOSTREAM)
+template <typename ... ArgTypes>
+unsigned ToFile (std::ostream & os, char const * fmt, ArgTypes && ... args) {
+    unsigned ret = 0;
+    if (os && fmt) {
+        _detail::Do(
+            [](auto, auto, auto){},
+            [&](auto c){os.put(c); return bool(os);},
+            [&]{return *fmt++;},
+            std::forward<ArgTypes>(args)...
+        );
+    }
+    return ret;
+}
+#endif  // defined(Y_OPT_FMT_SUPPORT_IOSTREAM)
+
+//----------------------------------------------------------------------
+
+#if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+template <typename ... ArgTypes>
+std::string ToStr (char const * fmt, ArgTypes && ... args) {
+    std::string ret;
+    if (fmt) {
+    #if defined(Y_OPT_FMT_STD_STRING_OUTPUT_PRECALC_SIZE)
+        size_t len = 0;
+        _detail::Do(
+            [](auto, auto, auto){},
+            [&](auto){len++;},
+            [&]{return *fmt++;},
+            std::forward<ArgTypes>(args)...
+        );
+    #endif
+        ret.reserve(len);
+        _detail::Do(
+            [](auto, auto, auto){},
+            [&](auto c){ret += c;},
+            [&]{return *fmt++;},
+            std::forward<ArgTypes>(args)...
+        );
+    }
+    return ret;
+}
+#endif  // defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+
+//----------------------------------------------------------------------
+
+#if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+template <typename ... ArgTypes>
+std::string ToStr (std::string const & fmt, ArgTypes && ... args) {
+    return ToStr(fmt.c_str(), std::forward<ArgTypes>(args)...);
+}
+#endif  // defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+
+//----------------------------------------------------------------------
+
+#if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+template <typename ... ArgTypes>
+std::string ToStr (std::string_view const & fmt, ArgTypes && ... args) {
+    std::string ret;
+    if (fmt) {
+        size_t idx = 0;
+    #if defined(Y_OPT_FMT_STD_STRING_OUTPUT_PRECALC_SIZE)
+        size_t len = 0;
+        _detail::Do(
+            [](auto, auto, auto){},
+            [&](auto){len++;},
+            [&]{return (idx < fmt.size()) ? fmt[idx++] : '\0';},
+            std::forward<ArgTypes>(args)...
+        );
+        idx = 0;
+    #endif
+        ret.reserve(len);
+        _detail::Do(
+            [](auto, auto, auto){},
+            [&](auto c){ret += c;},
+            [&]{return (idx < fmt.size()) ? fmt[idx++] : '\0';},
+            std::forward<ArgTypes>(args)...
+        );
+    }
+    return ret;
+}
+#endif  // defined(Y_OPT_FMT_SUPPORT_IOSTREAM)
+
+//----------------------------------------------------------------------
+//----------------------------------------------------------------------
 //======================================================================
 //----------------------------------------------------------------------
 //======================================================================
