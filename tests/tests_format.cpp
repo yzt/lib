@@ -1,6 +1,6 @@
 
-#include "../experimental/y_format.hpp"
 #include "catch.hpp"
+#include <y_format.hpp>
 #include <string>
 using namespace std::string_literals;
 
@@ -47,4 +47,6 @@ TEST_CASE("C-str to C-str 03", "[fmt]") {
     char cs1 [10] = "Hellop";
     int * p = nullptr;
     y::fmt::ToConsole("{},0x{}\n", cs1, p);
+
+    ::printf("%10d,%-10d\n", 7, 7);
 }

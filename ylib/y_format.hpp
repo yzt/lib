@@ -10,6 +10,7 @@
 
 //======================================================================
 
+#include <cstdint>
 #include <utility>  // std::forward
 #include <charconv> // std::to_chars() for float/double/long double
 #if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
@@ -25,8 +26,20 @@
 
 //======================================================================
 /* The format string has the following format:
+ *  any character except '{' is passed through.
+ *  two successive curlay braces "{{" will emit a curly brace.
+ *  something between '{' and '}' is a format spec, with the following structure:
  *
+ *      '{' arg_num [':' width] ['.' precision] [',' base] ['-' pad_char] [justify] [case] [sign] '}'
  *
+ *      "arg_num"is from 0 onwards, the number of the argument that will be put in place of this format spec
+ *      "width" is in [0..254], the minimum width of the whole field
+ *      "precision" is in [0..254], the number of digits after decimal
+ *      "base" is in [2..36]
+ *      "pad_char" is a single character that should be used for padding on right-aligned values. Default is ' '.
+ *      "justify" is exactly one of {'c', 'C', 'r'} for center-left, center-right, and right. Default is left-justified.
+ *      "case" is 'U', which asks for upper-case stuff (hex digits, the 'e' in scientific representation, etc.) Default is lower-case.
+ *      "sign" is one of {'+', '_'}, for always displaying the sign, or displaying either '-' or a space. Default is to only emit '-' for negative numbers.
  */
 //======================================================================
 
@@ -44,8 +57,46 @@ inline constexpr char HexDigits [17] = "0123456789ABCDEF";
 
 //----------------------------------------------------------------------
 
-struct Flags {
+enum class Justification : uint8_t {
+    Left = 0,
+    CenterLeft,
+    CenterRight,
+    Right,
 };
+
+enum class Case : uint8_t {
+    Lower = 0,
+    Upper,
+};
+
+enum class Sign : uint8_t {
+    OnlyNeg = 0,    // only '-'
+    Always,         // '-' or '+'
+    LeaveRoom,      // '-' or ' '
+};
+
+struct Flags {
+    union {
+        struct {
+            bool width : 1;
+            bool precision : 1;
+            bool base : 1;
+            bool padding : 1;
+            bool justification : 1;
+            bool case_ : 1;
+            bool sign : 1;
+        } overridden;
+        uint8_t has_non_defaults;    // if non-zero
+    };
+    uint8_t width;
+    uint8_t precision;
+    uint8_t base;
+    char pad;
+    Justification justify;
+    Case case_;
+    Sign sign;
+};
+static_assert(sizeof(Flags) == 8, "");
 
 //template <typename OutF, typename T>
 //void ToStr (OutF && out, T const & v, Flags flags);
@@ -53,12 +104,27 @@ struct Flags {
 //----------------------------------------------------------------------
 
 template <typename OutF>
-void ToStr (OutF && out, char const * v/*, Flags flags*/) {
+void ToStr (OutF && out, char const * v) {
     if (v) {
         while (*v)
             out(*v++);
     } else {
-        out('('); out('n'); out('u'); out('l'); out('l'); out(')');
+        ToStr(std::forward<OutF>(out), "(null)");
+    }
+}
+
+template <typename OutF>
+void ToStr (OutF && out, char const * v, Flags flags) {
+    if (v) {
+        if (0 == flags.has_non_defaults) {
+            while (*v)
+                out(*v++);
+        } else {    // the fun begins!
+            while (*v)
+                out(*v++);
+        }
+    } else {
+        ToStr(std::forward<OutF>(out), "(null)", flags);
     }
 }
 
@@ -68,13 +134,15 @@ void ToStr (OutF && out, std::basic_string<C> const & v) {
     for (auto c : v)
         out(c);
 }
+#endif  // defined(Y_OPT_FMT_SUPPORT_STD_STRING)
 
+#if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
 template <typename OutF, typename C>
 void ToStr (OutF && out, std::basic_string_view<C> const & v) {
     for (auto c : v)
         out(c);
 }
-#endif
+#endif  // defined(Y_OPT_FMT_SUPPORT_STD_STRING)
 
 template <typename OutF>
 void ToStr (OutF && out, unsigned long long v) {
@@ -102,12 +170,10 @@ template <typename OutF>
 void ToStr (OutF && out, unsigned int v) {return ToStr(std::forward<OutF>(out), (unsigned long long)(v));}
 template <typename OutF>
 void ToStr (OutF && out, signed int v) {return ToStr(std::forward<OutF>(out), (signed long long)(v));}
-
 template <typename OutF>
 void ToStr (OutF && out, unsigned short v) {return ToStr(std::forward<OutF>(out), (unsigned long long)(v));}
 template <typename OutF>
 void ToStr (OutF && out, signed short v) {return ToStr(std::forward<OutF>(out), (signed long long)(v));}
-
 template <typename OutF>
 void ToStr (OutF && out, unsigned char v) {return ToStr(std::forward<OutF>(out), (unsigned long long)(v));}
 template <typename OutF>
