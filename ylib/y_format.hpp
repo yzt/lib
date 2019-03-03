@@ -30,16 +30,16 @@
  *  two successive curlay braces "{{" will emit a curly brace.
  *  something between '{' and '}' is a format spec, with the following structure:
  *
- *      '{' arg_num [':' width] ['.' precision] [',' base] ['-' pad_char] [justify] [case] [sign] '}'
- *
+ *      '{' arg_num [':' width] ['.' precision] ['-' fill_char] [',' base] [case] [justify] [sign] '}'
+ *      '{' arg_num ['w' width] ['p' precision] ['f' fill_char] ['b' base] [case] [justify] [sign] '}'
  *      "arg_num"is from 0 onwards, the number of the argument that will be put in place of this format spec
  *      "width" is in [0..254], the minimum width of the whole field
  *      "precision" is in [0..254], the number of digits after decimal
+ *      "fill_char" is a single character that should be used for padding on right-aligned values. Default is ' '.
  *      "base" is in [2..36]
- *      "pad_char" is a single character that should be used for padding on right-aligned values. Default is ' '.
+ *      "sign" is one of {'+', '_'}, for always displaying the sign, or displaying either '-' or a space. Default is to only emit '-' for negative numbers.
  *      "justify" is exactly one of {'c', 'C', 'r'} for center-left, center-right, and right. Default is left-justified.
  *      "case" is 'U', which asks for upper-case stuff (hex digits, the 'e' in scientific representation, etc.) Default is lower-case.
- *      "sign" is one of {'+', '_'}, for always displaying the sign, or displaying either '-' or a space. Default is to only emit '-' for negative numbers.
  */
 //======================================================================
 
@@ -57,7 +57,7 @@ inline constexpr char HexDigits [17] = "0123456789ABCDEF";
 
 //----------------------------------------------------------------------
 
-enum class Justification : uint8_t {
+enum class Justify : uint8_t {
     Left = 0,
     CenterLeft,
     CenterRight,
@@ -80,21 +80,25 @@ struct Flags {
         struct {
             bool width : 1;
             bool precision : 1;
+            bool fill : 1;
             bool base : 1;
-            bool padding : 1;
-            bool justification : 1;
-            bool case_ : 1;
             bool sign : 1;
+            bool justify : 1;
+            bool case_ : 1;
         } overridden;
-        uint8_t has_non_defaults;    // if non-zero
+        uint8_t has_any_non_defaults;
     };
+    uint8_t index;
     uint8_t width;
     uint8_t precision;
-    uint8_t base;
-    char pad;
-    Justification justify;
-    Case case_;
-    Sign sign;
+    char fill;
+    uint8_t base : 6;
+    Sign sign : 2;
+    Justify justify : 2;
+    Case case_ : 1;
+    bool explicit_index : 1;
+    bool escaped_curly_brace : 1;
+    bool valid;
 };
 static_assert(sizeof(Flags) == 8, "");
 
@@ -195,7 +199,7 @@ void ToStr (OutF && out, float v) {
 template <typename OutF>
 void ToStr (OutF && out, double v) {
     char buffer [Y_OPT_FMT_MAX_REAL_NUM_CHAR_SIZE];
-    auto res = std::to_chars(buffer, buffer + sizeof(buffer), int(v));
+    auto res = std::to_chars(buffer, buffer + sizeof(buffer), v);
     for (char const * p = buffer; p != res.ptr; ++p)
         out(*p);
 }
@@ -231,6 +235,7 @@ enum class Err {
     AfterOpenBrace, // Expected '}' or '{' after open brace...
     TooFewArgs,
     TooManyArgs,
+    BadFormat,
 };
 
 //======================================================================
@@ -239,84 +244,157 @@ enum class Err {
 
 //----------------------------------------------------------------------
 
-//template <typename OutF, typename T>
-//inline bool EmitValue (OutF && out, T && v) {
-//    //for (auto c : "[arg]"s)
-//    //    out(c);
-//    //return true;
-//    cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v)/*, {}*/);
-//    return true;
-//}
+template <typename OutF, typename T>
+inline bool EmitValue (OutF && out, T && v, cvt::Flags flags) {
+    if (0 == flags.has_any_non_defaults)
+        cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v));
+    else    // flags have something non-default in them...
+        cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v)/*, flags*/);
+    return true;
+}
 
 //----------------------------------------------------------------------
 
 template <typename ErrF, typename OutF, typename InF>
-inline bool EmitArg (unsigned /*idx*/, ErrF && err, OutF && out, InF && in) {
+inline bool EmitArg (unsigned /*idx*/, cvt::Flags flags, ErrF && err, OutF && out, InF && in) {
     err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in));
     return false;
 }
 
 template <typename ErrF, typename OutF, typename InF, typename ArgType0>
-inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0) {
+inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, InF && in, ArgType0 && arg0) {
     switch (idx) {
-    case  0: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType0>(arg0)); return true;
+    case  0: return EmitValue(std::forward<OutF>(out), std::forward<ArgType0>(arg0), flags);
     default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
     }
 }
 
 template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1>
-inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1) {
+inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1) {
     switch (idx) {
-    case  0: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType0>(arg0)); return true;
-    case  1: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType1>(arg1)); return true;
+    case  0: return EmitValue(std::forward<OutF>(out), std::forward<ArgType0>(arg0), flags);
+    case  1: return EmitValue(std::forward<OutF>(out), std::forward<ArgType1>(arg1), flags);
     default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
     }
 }
 
 template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2>
-inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2) {
+inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2) {
     switch (idx) {
-    case  0: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType0>(arg0)); return true;
-    case  1: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType1>(arg1)); return true;
-    case  2: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType2>(arg2)); return true;
+    case  0: return EmitValue(std::forward<OutF>(out), std::forward<ArgType0>(arg0), flags);
+    case  1: return EmitValue(std::forward<OutF>(out), std::forward<ArgType1>(arg1), flags);
+    case  2: return EmitValue(std::forward<OutF>(out), std::forward<ArgType2>(arg2), flags);
     default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
     }
 }
 
 template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2, typename ArgType3>
-inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2, ArgType3 && arg3) {
+inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2, ArgType3 && arg3) {
     switch (idx) {
-    case  0: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType0>(arg0)); return true;
-    case  1: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType1>(arg1)); return true;
-    case  2: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType2>(arg2)); return true;
-    case  3: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType3>(arg3)); return true;
+    case  0: return EmitValue(std::forward<OutF>(out), std::forward<ArgType0>(arg0), flags);
+    case  1: return EmitValue(std::forward<OutF>(out), std::forward<ArgType1>(arg1), flags);
+    case  2: return EmitValue(std::forward<OutF>(out), std::forward<ArgType2>(arg2), flags);
+    case  3: return EmitValue(std::forward<OutF>(out), std::forward<ArgType3>(arg3), flags);
     default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
     }
 }
 
 template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2, typename ArgType3, typename ArgType4>
-inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2, ArgType3 && arg3, ArgType4 && arg4) {
+inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2, ArgType3 && arg3, ArgType4 && arg4) {
     switch (idx) {
-    case  0: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType0>(arg0)); return true;
-    case  1: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType1>(arg1)); return true;
-    case  2: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType2>(arg2)); return true;
-    case  3: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType3>(arg3)); return true;
-    case  4: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType4>(arg4)); return true;
+    case  0: return EmitValue(std::forward<OutF>(out), std::forward<ArgType0>(arg0), flags);
+    case  1: return EmitValue(std::forward<OutF>(out), std::forward<ArgType1>(arg1), flags);
+    case  2: return EmitValue(std::forward<OutF>(out), std::forward<ArgType2>(arg2), flags);
+    case  3: return EmitValue(std::forward<OutF>(out), std::forward<ArgType3>(arg3), flags);
+    case  4: return EmitValue(std::forward<OutF>(out), std::forward<ArgType4>(arg4), flags);
     default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
     }
 }
 
 template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2, typename ArgType3, typename ArgType4, typename ArgType5, typename ... ArgTypes>
-inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2, ArgType3 && arg3, ArgType4 && arg4, ArgType5 && arg5, ArgTypes && ... args) {
+inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2, ArgType3 && arg3, ArgType4 && arg4, ArgType5 && arg5, ArgTypes && ... args) {
     switch (idx) {
-    case  0: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType0>(arg0)); return true;
-    case  1: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType1>(arg1)); return true;
-    case  2: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType2>(arg2)); return true;
-    case  3: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType3>(arg3)); return true;
-    case  4: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType4>(arg4)); return true;
-    case  5: cvt::ToStr(std::forward<OutF>(out), std::forward<ArgType5>(arg5)); return true;
+    case  0: return EmitValue(std::forward<OutF>(out), std::forward<ArgType0>(arg0), flags);
+    case  1: return EmitValue(std::forward<OutF>(out), std::forward<ArgType1>(arg1), flags);
+    case  2: return EmitValue(std::forward<OutF>(out), std::forward<ArgType2>(arg2), flags);
+    case  3: return EmitValue(std::forward<OutF>(out), std::forward<ArgType3>(arg3), flags);
+    case  4: return EmitValue(std::forward<OutF>(out), std::forward<ArgType4>(arg4), flags);
+    case  5: return EmitValue(std::forward<OutF>(out), std::forward<ArgType5>(arg5), flags);
     default: return EmitArg(idx - 6, std::forward<ErrF>(err), std::forward<OutF>(out), std::forward<InF>(in), std::forward<ArgTypes>(args)...);
     }
+}
+
+//----------------------------------------------------------------------
+
+inline bool IsDigit (char c) {
+    return '0' <= c && c <= '9';
+}
+
+//----------------------------------------------------------------------
+
+template <typename InF>
+cvt::Flags ReadCvtFlags (InF && in) {
+    cvt::Flags ret = {};
+    auto c = in();
+    if ('{' == c) {
+        ret.escaped_curly_brace = true;
+        ret.valid = true;
+        return ret;
+    }
+    while (IsDigit(c)) {
+        ret.index = 10 * ret.index + (c - '0');
+        ret.explicit_index = true;
+        c = in();
+    }
+    if ('w' == c) {
+        c = in();
+        while (IsDigit(c)) {
+            ret.width = 10 * ret.width + (c - '0');
+            ret.overridden.width = true;
+            c = in();
+        }
+    }
+    if ('p' == c) {
+        c = in();
+        while (IsDigit(c)) {
+            ret.precision = 10 * ret.precision + (c - '0');
+            ret.overridden.precision = true;
+            c = in();
+        }
+    }
+    if ('f' == c) {
+        c = in();
+        ret.fill = c;
+        ret.overridden.fill = true;
+        c = in();
+    }
+    if ('b' == c) {
+        c = in();
+        while (IsDigit(c)) {
+            ret.base = 10 * ret.base + (c - '0');
+            ret.overridden.base = true;
+            c = in();
+        }
+    }
+    if ('+' == c || '_' == c) {
+        ret.sign = ('+' == c) ? cvt::Sign::Always : cvt::Sign::LeaveRoom;
+        ret.overridden.sign = true;
+        c = in();
+    }
+    if ('c' == c || 'C' == c || 'r' == c) {
+        ret.justify = ('c' == c) ? cvt::Justify::CenterLeft : (('C' == c) ? cvt::Justify::CenterRight : cvt::Justify::Right);
+        ret.overridden.justify = true;
+        c = in();
+    }
+    if ('U' == c) {
+        ret.case_ = cvt::Case::Upper;
+        ret.overridden.case_ = true;
+        c = in();
+    }
+    if ('}' == c) {
+        ret.valid = true;
+    }
+    return ret;
 }
 
 //----------------------------------------------------------------------
@@ -329,32 +407,45 @@ inline bool EmitArg (unsigned idx, ErrF && err, OutF && out, InF && in, ArgType0
 //      (or upon error.)
 // ErrF: A callable thing that will be called with 3 parameters: an "Err"
 //      for the error code, the "out" object and the "in" object (in case
-//      it needs to extract some state from them, e.g. position, etc.)
+//      it needs to extract some state from them, e.g. position, etc.) It
+//      should return a boolean-like thing to signal whether we should continue
+//      or not.
 template <typename ErrF, typename OutF, typename InF, typename ... ArgTypes>
 void Do (ErrF && err, OutF && out, InF && in, ArgTypes && ... args) {
-    int cur_arg = 0;
-    for (;;) {
+    uint8_t cur_arg = 0;
+    bool should_continue = true;
+    while (should_continue) {
         auto c = in();
         if ('\0' == c) {
-            break;
+            should_continue = false;
         } else if ('{' == c) {
-            c = in();
-            if ('}' == c) {
-                if (!EmitArg(cur_arg++, std::forward<ErrF>(err), std::forward<OutF>(out), std::forward<InF>(in), std::forward<ArgTypes>(args)...))
-                    break;
-            } else if ('{' == c) {
-                out(c);
+            auto flags = ReadCvtFlags(std::forward<InF>(in));
+            if (flags.valid) {
+                if (flags. escaped_curly_brace) {
+                    should_continue = out('{');
+                } else {
+                    if (!flags.explicit_index) {
+                        flags.index = cur_arg++;
+                    }
+                    should_continue = EmitArg(flags.index, flags, std::forward<ErrF>(err), std::forward<OutF>(out), std::forward<InF>(in), std::forward<ArgTypes>(args)...);
+                }
             } else {
-                err(Err::AfterOpenBrace, out, in);
-                break;
+                should_continue = err(Err::BadFormat, std::forward<OutF>(out), std::forward<InF>(in));
             }
+            //c = in();
+            //if ('}' == c) {
+            //    should_continue = EmitArg(cur_arg++, std::forward<ErrF>(err), std::forward<OutF>(out), std::forward<InF>(in), std::forward<ArgTypes>(args)...);
+            //} else if ('{' == c) {
+            //    should_continue = out(c);
+            //} else {
+            //    should_continue = err(Err::AfterOpenBrace, out, in);
+            //}
         } else {
-            if (!out(c))
-                break;
+            should_continue = out(c);
         }
     }
-    if (cur_arg != sizeof...(args))
-        err(Err::TooManyArgs, std::forward<OutF>(out), std::forward<InF>(in));
+    //if (cur_arg != sizeof...(args))
+    //    err(Err::TooManyArgs, std::forward<OutF>(out), std::forward<InF>(in));
 }
 
 //----------------------------------------------------------------------
@@ -392,7 +483,7 @@ unsigned ToCStr (char * buffer, unsigned size, char const * fmt, ArgTypes && ...
     if (buffer && size && fmt) {
         size -= 1;
         _detail::Do(
-            [](auto, auto, auto){},
+            [](auto, auto, auto){return false;},
             [&](auto c){if (ret < size) buffer[ret++] = c; return ret <= size;},
             [&]{return *fmt++;},
             std::forward<ArgTypes>(args)...
@@ -421,7 +512,7 @@ unsigned ToCStr (char * buffer, unsigned size, std::string_view const & fmt, Arg
         size -= 1;
         unsigned idx = 0;
         _detail::Do(
-            [](auto, auto, auto){},
+            [](auto, auto, auto){return false;},
             [&](auto c){if (ret < size) buffer[ret++] = c; return ret <= size;},
             [&]{return (idx < fmt.size()) ? fmt[idx++] : '\0';},
             std::forward<ArgTypes>(args)...
@@ -440,7 +531,7 @@ unsigned ToFile (FILE * file, char const * fmt, ArgTypes && ... args) {
     unsigned ret = 0;
     if (file && fmt) {
         _detail::Do(
-            [](auto, auto, auto){},
+            [](auto, auto, auto){return false;},
             [&](auto c){return ::fputc(c, file) != EOF;},
             [&]{return *fmt++;},
             std::forward<ArgTypes>(args)...
@@ -467,7 +558,7 @@ unsigned ToFile (std::ostream & os, char const * fmt, ArgTypes && ... args) {
     unsigned ret = 0;
     if (os && fmt) {
         _detail::Do(
-            [](auto, auto, auto){},
+            [](auto, auto, auto){return false;},
             [&](auto c){os.put(c); return bool(os);},
             [&]{return *fmt++;},
             std::forward<ArgTypes>(args)...
@@ -486,17 +577,18 @@ std::string ToStr (char const * fmt, ArgTypes && ... args) {
     if (fmt) {
     #if defined(Y_OPT_FMT_STD_STRING_OUTPUT_PRECALC_SIZE)
         size_t len = 0;
+        char const * fmt_cpy = fmt;
         _detail::Do(
-            [](auto, auto, auto){},
-            [&](auto){len++;},
-            [&]{return *fmt++;},
+            [](auto, auto, auto){return false;},
+            [&](auto){len++; return true;},
+            [&]{return *fmt_cpy++;},
             std::forward<ArgTypes>(args)...
         );
-    #endif
         ret.reserve(len);
+    #endif
         _detail::Do(
-            [](auto, auto, auto){},
-            [&](auto c){ret += c;},
+            [](auto, auto, auto){return false;},
+            [&](auto c){ret += c; return true;},
             [&]{return *fmt++;},
             std::forward<ArgTypes>(args)...
         );
@@ -525,7 +617,7 @@ std::string ToStr (std::string_view const & fmt, ArgTypes && ... args) {
     #if defined(Y_OPT_FMT_STD_STRING_OUTPUT_PRECALC_SIZE)
         size_t len = 0;
         _detail::Do(
-            [](auto, auto, auto){},
+            [](auto, auto, auto){return false;},
             [&](auto){len++;},
             [&]{return (idx < fmt.size()) ? fmt[idx++] : '\0';},
             std::forward<ArgTypes>(args)...
@@ -534,7 +626,7 @@ std::string ToStr (std::string_view const & fmt, ArgTypes && ... args) {
     #endif
         ret.reserve(len);
         _detail::Do(
-            [](auto, auto, auto){},
+            [](auto, auto, auto){return false;},
             [&](auto c){ret += c;},
             [&]{return (idx < fmt.size()) ? fmt[idx++] : '\0';},
             std::forward<ArgTypes>(args)...
