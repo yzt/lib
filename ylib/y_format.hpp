@@ -7,8 +7,11 @@
 #define Y_OPT_FMT_SUPPORT_STD_STRING                1
 #define Y_OPT_FMT_STD_STRING_OUTPUT_PRECALC_SIZE    1
 #define Y_OPT_FMT_MAX_REAL_NUM_CHAR_SIZE            100
+#define Y_OPT_FMT_MAX_INTEGER_NUM_CHAR_SIZE         64
 
 //======================================================================
+
+//#define _HAS_COMPLETE_CHARCONV  1
 
 #include <cstdint>
 #include <utility>  // std::forward
@@ -37,9 +40,9 @@
  *      "precision" is in [0..254], the number of digits after decimal
  *      "fill_char" is a single character that should be used for padding on right-aligned values. Default is ' '.
  *      "base" is in [2..36]
- *      "sign" is one of {'+', '_'}, for always displaying the sign, or displaying either '-' or a space. Default is to only emit '-' for negative numbers.
+ *      //"sign" is one of {'+', '_'}, for always displaying the sign, or displaying either '-' or a space. Default is to only emit '-' for negative numbers.
  *      "justify" is exactly one of {'c', 'C', 'r'} for center-left, center-right, and right. Default is left-justified.
- *      "case" is 'U', which asks for upper-case stuff (hex digits, the 'e' in scientific representation, etc.) Default is lower-case.
+ *      //"case" is 'U', which asks for upper-case stuff (hex digits, the 'e' in scientific representation, etc.) Default is lower-case.
  */
 //======================================================================
 
@@ -82,9 +85,9 @@ struct Flags {
             bool precision : 1;
             bool fill : 1;
             bool base : 1;
-            bool sign : 1;
+            //bool sign : 1;
             bool justify : 1;
-            bool case_ : 1;
+            //bool case_ : 1;
         } overridden;
         uint8_t has_any_non_defaults;
     };
@@ -93,9 +96,9 @@ struct Flags {
     uint8_t precision;
     char fill;
     uint8_t base : 6;
-    Sign sign : 2;
+    //Sign sign : 2;
     Justify justify : 2;
-    Case case_ : 1;
+    //Case case_ : 1;
     bool explicit_index : 1;
     bool escaped_curly_brace : 1;
     bool valid;
@@ -109,27 +112,11 @@ static_assert(sizeof(Flags) == 8, "");
 
 template <typename OutF>
 void ToStr (OutF && out, char const * v) {
-    if (v) {
+    if (v)
         while (*v)
             out(*v++);
-    } else {
-        ToStr(std::forward<OutF>(out), "(null)");
-    }
-}
-
-template <typename OutF>
-void ToStr (OutF && out, char const * v, Flags flags) {
-    if (v) {
-        if (0 == flags.has_non_defaults) {
-            while (*v)
-                out(*v++);
-        } else {    // the fun begins!
-            while (*v)
-                out(*v++);
-        }
-    } else {
-        ToStr(std::forward<OutF>(out), "(null)", flags);
-    }
+    //else
+    //    ToStr(std::forward<OutF>(out), "(null)");
 }
 
 #if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
@@ -225,6 +212,193 @@ void ToStr (OutF && out, void const * v) {
 }
 
 //----------------------------------------------------------------------
+
+// Handled width, justification, fill, sign
+template <typename OutF, typename Char>
+void ToStrHelper (OutF && out, Char const * str, unsigned size, Flags const flags/*, bool is_numeric = false, bool is_negative = false*/) {
+    unsigned target_width = (flags.overridden.width ? flags.width : size);
+    //bool needs_sign = (is_numeric && (is_negative || (flags.overridden.sign && flags.sign != Sign::OnlyNeg)));
+    unsigned used_width = size;// + (needs_sign ? 1 : 0);
+    if (target_width < used_width) target_width = used_width;
+    Char fill_char = (flags.overridden.fill ? flags.fill : ' ');
+    unsigned total_pad = unsigned(target_width - used_width);
+    unsigned pad_before = 0, pad_after = total_pad;
+    if (flags.overridden.justify) {
+        if (flags.justify == Justify::Right) {pad_before = total_pad; pad_after = 0;}
+        else if (flags.justify == Justify::CenterLeft) {pad_before = total_pad / 2; pad_after = (total_pad + 1) / 2;}
+        else if (flags.justify == Justify::CenterRight) {pad_before = (total_pad + 1) / 2; pad_after = total_pad / 2;}
+    }
+
+    for (unsigned i = 0; i < pad_before; ++i) out(fill_char);
+    //if (needs_sign) out(is_negative ? '-' : (flags.sign == Sign::Always ? '+' : ' '));
+    for (unsigned i = 0; i < size; ++i) out(str[i]);
+    for (unsigned i = 0; i < pad_after; ++i) out(fill_char);
+}
+
+namespace detail {
+template <typename Char>
+inline unsigned StrLen (Char const * s) {
+    unsigned ret = 0;
+    if (s)
+        while (*s++)
+            ret++;
+    return ret;
+}
+}
+
+//======================================================================
+// ToStr for built-in types:
+//----------------------------------------------------------------------
+// Handle string types:
+//----------------------------------------------------------------------
+
+template <typename OutF, typename CharT>
+std::enable_if_t<
+    std::is_same_v<CharT, char> ||
+    std::is_same_v<CharT, wchar_t> ||
+    std::is_same_v<CharT, char16_t> ||
+    std::is_same_v<CharT, char32_t>>
+ToStr (OutF && out, CharT const * v, Flags flags) {
+    if (0 == flags.has_any_non_defaults) {
+        if (v)
+            while (*v)
+                out(*v++);
+    } else {
+        unsigned size = detail::StrLen(v);
+        ToStrHelper(std::forward<OutF>(out), v, size, flags);
+    }
+}
+
+#if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+template <typename OutF, typename C>
+void ToStr (OutF && out, std::basic_string<C> const & v, Flags flags) {
+    if (0 == flags.has_any_non_defaults) {
+        for (auto const c : v)
+            out(c);
+    } else {
+        ToStrHelper(std::forward<OutF>(out), v.data(), unsigned(v.size()), flags);
+    }
+}
+#endif  // defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+
+#if defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+template <typename OutF, typename C>
+void ToStr (OutF && out, std::basic_string_view<C> const & v, Flags flags) {
+    if (0 == flags.has_any_non_defaults) {
+        for (auto const c : v)
+            out(c);
+    } else {
+        ToStrHelper(std::forward<OutF>(out), v.data(), unsigned(v.size()), flags);
+    }
+}
+#endif  // defined(Y_OPT_FMT_SUPPORT_STD_STRING)
+
+//----------------------------------------------------------------------
+// Handle float types:
+//----------------------------------------------------------------------
+
+template <typename OutF, typename RealT>
+std::enable_if_t<
+    std::is_same_v<RealT, float> ||
+    std::is_same_v<RealT, double> ||
+    std::is_same_v<RealT, long double>>
+ToStr (OutF && out, RealT v, Flags flags) {
+    char buffer [Y_OPT_FMT_MAX_REAL_NUM_CHAR_SIZE];
+    std::to_chars_result res;
+
+    if (0 == flags.has_any_non_defaults) {
+        res = std::to_chars(buffer, buffer + sizeof(buffer), v);
+        for (char const * p = buffer; p != res.ptr; ++p)
+            out(*p);
+    } else {
+        //bool is_negative = false;
+        //if (flags.overridden.sign && v < 0) {
+        //    v = -v;
+        //    is_negative = true;
+        //}
+        std::chars_format fmt = ((flags.overridden.base && flags.base == 16)
+            ? std::chars_format::hex
+            : std::chars_format::fixed);
+    
+        if (flags.overridden.precision)
+            res = std::to_chars(buffer, buffer + sizeof(buffer), v, fmt, flags.precision);
+        else
+            res = std::to_chars(buffer, buffer + sizeof(buffer), v, fmt);
+
+        if (flags.overridden.width || flags.overridden.fill || flags.overridden.justify /*|| flags.overridden.sign*/)
+            ToStrHelper(std::forward<OutF>(out), buffer, unsigned(res.ptr - buffer), flags/*, true, is_negative*/);
+        else
+            for (char const * p = buffer; p != res.ptr; ++p)
+                out(*p);
+    }
+}
+
+//----------------------------------------------------------------------
+// Handle integer types:
+//----------------------------------------------------------------------
+
+template <typename OutF, typename IntT>
+std::enable_if_t<
+//    std::is_same_v<IntT, signed char> ||
+    std::is_same_v<IntT, signed short int> ||
+    std::is_same_v<IntT, signed int> ||
+    std::is_same_v<IntT, signed long int> ||
+    std::is_same_v<IntT, signed long long int> ||
+//    std::is_same_v<IntT, unsigned char> ||
+    std::is_same_v<IntT, unsigned short int> ||
+    std::is_same_v<IntT, unsigned int> ||
+    std::is_same_v<IntT, unsigned long int> ||
+    std::is_same_v<IntT, unsigned long long int>>
+ToStr (OutF && out, IntT v, Flags flags) {
+    char buffer [Y_OPT_FMT_MAX_INTEGER_NUM_CHAR_SIZE];
+    std::to_chars_result res;
+
+    if (0 == flags.has_any_non_defaults) {
+        res = std::to_chars(buffer, buffer + sizeof(buffer), v);
+        for (char const * p = buffer; p != res.ptr; ++p)
+            out(*p);
+    } else {
+        int base = (flags.overridden.base ? flags.base : 10);
+        if (base < 2) base = 2;
+        if (base > 36) base = 36;
+        res = std::to_chars(buffer, buffer + sizeof(buffer), v, base);
+
+        if (flags.overridden.width || flags.overridden.fill || flags.overridden.justify /*|| flags.overridden.sign*/)
+            ToStrHelper(std::forward<OutF>(out), buffer, unsigned(res.ptr - buffer), flags/*, true, is_negative*/);
+        else
+            for (char const * p = buffer; p != res.ptr; ++p)
+                out(*p);
+    }
+}
+
+//----------------------------------------------------------------------
+// Handle character types:
+//----------------------------------------------------------------------
+
+template <typename OutF/*, typename CharT*/>
+//std::enable_if<
+//    std::is_same_v<CharT, char32_t> ||
+//    std::is_same_v<CharT, wchar_t> ||
+//    std::is_same_v<CharT, char16_t> ||
+//    std::is_same_v<CharT, char>>
+void
+ToStr (OutF && out, char v, Flags flags) {
+    if (0 == flags.has_any_non_defaults) {
+        out(v);
+    } else {
+        ToStrHelper(std::forward<OutF>(out), &v, 1, flags);
+    }
+}
+
+//----------------------------------------------------------------------
+// Handle bool:
+//----------------------------------------------------------------------
+
+template <typename OutF>
+void ToStr (OutF && out, bool v, Flags flags) {
+    ToStr(std::forward<OutF>(out), (v ? '1' : '0'), flags);
+}
+
 //----------------------------------------------------------------------
 
         }   // namespace cvt
@@ -240,27 +414,27 @@ enum class Err {
 
 //======================================================================
 
-        namespace _detail {
+        namespace detail {
 
 //----------------------------------------------------------------------
 
 template <typename OutF, typename T>
 inline bool EmitValue (OutF && out, T && v, cvt::Flags flags) {
-    if (0 == flags.has_any_non_defaults)
-        cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v));
-    else    // flags have something non-default in them...
-        cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v)/*, flags*/);
+    //if (0 == flags.has_any_non_defaults)
+    //    cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v));
+    //else    // flags have something non-default in them...
+    //    cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v), flags);
+    //return true;
+    
+    cvt::ToStr(std::forward<OutF>(out), std::forward<T>(v), flags);
     return true;
 }
-
-//----------------------------------------------------------------------
 
 template <typename ErrF, typename OutF, typename InF>
 inline bool EmitArg (unsigned /*idx*/, cvt::Flags flags, ErrF && err, OutF && out, InF && in) {
     err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in));
     return false;
 }
-
 template <typename ErrF, typename OutF, typename InF, typename ArgType0>
 inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, InF && in, ArgType0 && arg0) {
     switch (idx) {
@@ -268,7 +442,6 @@ inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, I
     default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
     }
 }
-
 template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1>
 inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1) {
     switch (idx) {
@@ -277,7 +450,6 @@ inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, I
     default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
     }
 }
-
 template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2>
 inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2) {
     switch (idx) {
@@ -287,7 +459,6 @@ inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, I
     default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
     }
 }
-
 template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2, typename ArgType3>
 inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2, ArgType3 && arg3) {
     switch (idx) {
@@ -298,7 +469,6 @@ inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, I
     default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
     }
 }
-
 template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2, typename ArgType3, typename ArgType4>
 inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2, ArgType3 && arg3, ArgType4 && arg4) {
     switch (idx) {
@@ -310,7 +480,6 @@ inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, I
     default: err(Err::TooFewArgs, std::forward<OutF>(out), std::forward<InF>(in)); return false;
     }
 }
-
 template <typename ErrF, typename OutF, typename InF, typename ArgType0, typename ArgType1, typename ArgType2, typename ArgType3, typename ArgType4, typename ArgType5, typename ... ArgTypes>
 inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, InF && in, ArgType0 && arg0, ArgType1 && arg1, ArgType2 && arg2, ArgType3 && arg3, ArgType4 && arg4, ArgType5 && arg5, ArgTypes && ... args) {
     switch (idx) {
@@ -326,12 +495,6 @@ inline bool EmitArg (unsigned idx, cvt::Flags flags, ErrF && err, OutF && out, I
 
 //----------------------------------------------------------------------
 
-inline bool IsDigit (char c) {
-    return '0' <= c && c <= '9';
-}
-
-//----------------------------------------------------------------------
-
 template <typename InF>
 cvt::Flags ReadCvtFlags (InF && in) {
     cvt::Flags ret = {};
@@ -341,14 +504,14 @@ cvt::Flags ReadCvtFlags (InF && in) {
         ret.valid = true;
         return ret;
     }
-    while (IsDigit(c)) {
+    while ('0' <= c && c <= '9') {
         ret.index = 10 * ret.index + (c - '0');
         ret.explicit_index = true;
         c = in();
     }
     if ('w' == c) {
         c = in();
-        while (IsDigit(c)) {
+        while ('0' <= c && c <= '9') {
             ret.width = 10 * ret.width + (c - '0');
             ret.overridden.width = true;
             c = in();
@@ -356,7 +519,7 @@ cvt::Flags ReadCvtFlags (InF && in) {
     }
     if ('p' == c) {
         c = in();
-        while (IsDigit(c)) {
+        while ('0' <= c && c <= '9') {
             ret.precision = 10 * ret.precision + (c - '0');
             ret.overridden.precision = true;
             c = in();
@@ -370,15 +533,15 @@ cvt::Flags ReadCvtFlags (InF && in) {
     }
     if ('b' == c) {
         c = in();
-        while (IsDigit(c)) {
+        while ('0' <= c && c <= '9') {
             ret.base = 10 * ret.base + (c - '0');
             ret.overridden.base = true;
             c = in();
         }
     }
     if ('+' == c || '_' == c) {
-        ret.sign = ('+' == c) ? cvt::Sign::Always : cvt::Sign::LeaveRoom;
-        ret.overridden.sign = true;
+    //    ret.sign = ('+' == c) ? cvt::Sign::Always : cvt::Sign::LeaveRoom;
+    //    ret.overridden.sign = true;
         c = in();
     }
     if ('c' == c || 'C' == c || 'r' == c) {
@@ -387,8 +550,8 @@ cvt::Flags ReadCvtFlags (InF && in) {
         c = in();
     }
     if ('U' == c) {
-        ret.case_ = cvt::Case::Upper;
-        ret.overridden.case_ = true;
+    //    ret.case_ = cvt::Case::Upper;
+    //    ret.overridden.case_ = true;
         c = in();
     }
     if ('}' == c) {
@@ -432,14 +595,6 @@ void Do (ErrF && err, OutF && out, InF && in, ArgTypes && ... args) {
             } else {
                 should_continue = err(Err::BadFormat, std::forward<OutF>(out), std::forward<InF>(in));
             }
-            //c = in();
-            //if ('}' == c) {
-            //    should_continue = EmitArg(cur_arg++, std::forward<ErrF>(err), std::forward<OutF>(out), std::forward<InF>(in), std::forward<ArgTypes>(args)...);
-            //} else if ('{' == c) {
-            //    should_continue = out(c);
-            //} else {
-            //    should_continue = err(Err::AfterOpenBrace, out, in);
-            //}
         } else {
             should_continue = out(c);
         }
@@ -482,7 +637,7 @@ unsigned ToCStr (char * buffer, unsigned size, char const * fmt, ArgTypes && ...
     unsigned ret = 0;
     if (buffer && size && fmt) {
         size -= 1;
-        _detail::Do(
+        detail::Do(
             [](auto, auto, auto){return false;},
             [&](auto c){if (ret < size) buffer[ret++] = c; return ret <= size;},
             [&]{return *fmt++;},
@@ -511,7 +666,7 @@ unsigned ToCStr (char * buffer, unsigned size, std::string_view const & fmt, Arg
     if (buffer && size && fmt) {
         size -= 1;
         unsigned idx = 0;
-        _detail::Do(
+        detail::Do(
             [](auto, auto, auto){return false;},
             [&](auto c){if (ret < size) buffer[ret++] = c; return ret <= size;},
             [&]{return (idx < fmt.size()) ? fmt[idx++] : '\0';},
@@ -530,7 +685,7 @@ template <typename ... ArgTypes>
 unsigned ToFile (FILE * file, char const * fmt, ArgTypes && ... args) {
     unsigned ret = 0;
     if (file && fmt) {
-        _detail::Do(
+        detail::Do(
             [](auto, auto, auto){return false;},
             [&](auto c){return ::fputc(c, file) != EOF;},
             [&]{return *fmt++;},
@@ -557,7 +712,7 @@ template <typename ... ArgTypes>
 unsigned ToFile (std::ostream & os, char const * fmt, ArgTypes && ... args) {
     unsigned ret = 0;
     if (os && fmt) {
-        _detail::Do(
+        detail::Do(
             [](auto, auto, auto){return false;},
             [&](auto c){os.put(c); return bool(os);},
             [&]{return *fmt++;},
@@ -578,7 +733,7 @@ std::string ToStr (char const * fmt, ArgTypes && ... args) {
     #if defined(Y_OPT_FMT_STD_STRING_OUTPUT_PRECALC_SIZE)
         size_t len = 0;
         char const * fmt_cpy = fmt;
-        _detail::Do(
+        detail::Do(
             [](auto, auto, auto){return false;},
             [&](auto){len++; return true;},
             [&]{return *fmt_cpy++;},
@@ -586,7 +741,7 @@ std::string ToStr (char const * fmt, ArgTypes && ... args) {
         );
         ret.reserve(len);
     #endif
-        _detail::Do(
+        detail::Do(
             [](auto, auto, auto){return false;},
             [&](auto c){ret += c; return true;},
             [&]{return *fmt++;},
@@ -616,7 +771,7 @@ std::string ToStr (std::string_view const & fmt, ArgTypes && ... args) {
         size_t idx = 0;
     #if defined(Y_OPT_FMT_STD_STRING_OUTPUT_PRECALC_SIZE)
         size_t len = 0;
-        _detail::Do(
+        detail::Do(
             [](auto, auto, auto){return false;},
             [&](auto){len++;},
             [&]{return (idx < fmt.size()) ? fmt[idx++] : '\0';},
@@ -625,7 +780,7 @@ std::string ToStr (std::string_view const & fmt, ArgTypes && ... args) {
         idx = 0;
     #endif
         ret.reserve(len);
-        _detail::Do(
+        detail::Do(
             [](auto, auto, auto){return false;},
             [&](auto c){ret += c;},
             [&]{return (idx < fmt.size()) ? fmt[idx++] : '\0';},

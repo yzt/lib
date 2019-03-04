@@ -1,6 +1,6 @@
 
-#include "catch.hpp"
 #include <y_format.hpp>
+#include "catch.hpp"
 #include <string>
 using namespace std::string_literals;
 
@@ -57,6 +57,14 @@ TEST_CASE("Formatting with explicit argument numbers", "[fmt]") {
 }
 
 TEST_CASE("Format Specs Galore!", "[fmt]") {
-    auto s = y::fmt::ToStr("Only {0w13p2f-b10+rU}, and that's it.", 3.1415926535);
-    CHECK(s == "Only --------+3.14, and that's it.");
+    auto s = y::fmt::ToStr("Only {0w13f-b10+rU}, and that's it.", 3.14);
+    CHECK(s == "Only ---------3.14, and that's it.");
+    s = y::fmt::ToStr("Only {0w13f-r}, and that's it.", 3.14);
+    CHECK(s == "Only ---------3.14, and that's it.");
+    s = y::fmt::ToStr("Only {0w13r}, and that's it.", 3.14);
+    CHECK(s == "Only          3.14, and that's it.");
+    s = y::fmt::ToStr("Only {0w13C}, and that's it.", 3.14);
+    CHECK(s == "Only      3.14    , and that's it.");
+    s = y::fmt::ToStr("Only {0w13c}, and that's it.", 3.14);
+    CHECK(s == "Only     3.14     , and that's it.");
 }
