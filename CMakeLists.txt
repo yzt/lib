@@ -114,6 +114,9 @@ add_executable ("tests"
 	"experimental/y_socket.hpp"
 	"experimental/y_socket.cpp"
 	"tests/tests_socket.cpp"
+	
+	"experimental/y_string_conversion.hpp"
+	"tests/tests_string_conversion.cpp"
 )
 
 #-----------------------------------------------------------------------
