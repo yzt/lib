@@ -68,6 +68,15 @@ add_executable ("example_profiler"
 
 #-----------------------------------------------------------------------
 
+add_executable ("example_ecs"
+	"experimental/example_ecs.cpp"
+
+	"experimental/y_ecs.hpp"
+	"experimental/y_ecs.cpp"
+)
+
+#-----------------------------------------------------------------------
+
 add_executable ("tests"
 	"tests/catch.hpp"
 	"tests/tests_main.cpp"

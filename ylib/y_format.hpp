@@ -321,7 +321,7 @@ ToStr (OutF && out, RealT v, Flags flags) {
             : std::chars_format::fixed);
     
         if (flags.overridden.precision)
-            res = std::to_chars(buffer, buffer + sizeof(buffer), v, fmt, flags.precision);
+            res = std::to_chars(buffer, buffer + sizeof(buffer), v, fmt/*, flags.precision*/);  // FIXME(yzt): VS2017 still doesn't support this. 2019 isn't much better either.
         else
             res = std::to_chars(buffer, buffer + sizeof(buffer), v, fmt);
 
