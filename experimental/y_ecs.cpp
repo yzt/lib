@@ -1,4 +1,5 @@
 #include "y_ecs.hpp"
+#include <cassert>
 #include <cstdarg>
 #include <cstdlib>  // for malloc() and friends
 #include <cstring>  // strcmp()
@@ -15,8 +16,34 @@ auto g_dealloc = ::free;
 //    return SizeType(sizeof(EntityType) + component_count * sizeof(/**/ComponentCount/*/EntityType{}.component_seqnums[0]/**/));
 //}
 //----------------------------------------------------------------------
+// Note(yzt): Returns the power, not the actual number, i.e. for 16384, it returns 14.
+static inline SizeType NextPowerOfTwo (SizeType x) {
+    SizeType ret = 0, v = 1;
+    while (v < x) {
+        v *= 2;
+        ret += 1;
+    }
+    return ret;
+}
+//----------------------------------------------------------------------
+static inline SizeType StrCpy (char * dst, char const * src, SizeType dst_size) {
+    SizeType ret = 0;
+    if (dst && src && dst_size > 0) {
+        while (ret < dst_size) {
+            char ch = *src++;
+            *dst++ = ch;
+            ret += 1;
+            if ('\0' == ch)
+                break;
+        }
+        *(dst - 1) = '\0';
+    }
+    return ret;
+}
+//----------------------------------------------------------------------
+//----------------------------------------------------------------------
 template <typename T, size_t N>
-bool BitSet_Empty (T (&bits) [N]) {
+static inline bool BitSet_Empty (T (&bits) [N]) {
     static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
     for (size_t i = 0; i < N; ++i)
         if (bits[i] != 0)
@@ -25,7 +52,7 @@ bool BitSet_Empty (T (&bits) [N]) {
 }
 //----------------------------------------------------------------------
 template <typename T, size_t N>
-unsigned BitSet_CountOnes (T (&bits) [N]) {
+static inline unsigned BitSet_CountOnes (T (&bits) [N]) {
     static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
     unsigned ret = 0;
     for (size_t i = 0; i < N; ++i) {
@@ -38,7 +65,7 @@ unsigned BitSet_CountOnes (T (&bits) [N]) {
 }
 //----------------------------------------------------------------------
 template <typename T, size_t N>
-void BitSet_SetBit (T (&bits) [N], unsigned idx) {
+static inline void BitSet_SetBit (T (&bits) [N], unsigned idx) {
     static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
     if (idx < N * 8 * sizeof(T)) {
         unsigned w = idx / (8 * sizeof(T));
@@ -48,7 +75,7 @@ void BitSet_SetBit (T (&bits) [N], unsigned idx) {
 }
 //----------------------------------------------------------------------
 template <typename T, size_t N>
-void BitSet_ClearBit (T (&bits) [N], unsigned idx) {
+static inline void BitSet_ClearBit (T (&bits) [N], unsigned idx) {
     static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
     if (idx < N * 8 * sizeof(T)) {
         unsigned w = idx / (8 * sizeof(T));
@@ -58,14 +85,14 @@ void BitSet_ClearBit (T (&bits) [N], unsigned idx) {
 }
 //----------------------------------------------------------------------
 template <typename T, size_t N>
-void BitSet_ClearAll (T (&bits) [N]) {
+static inline void BitSet_ClearAll (T (&bits) [N]) {
     static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
     for (size_t i = 0; i < N; ++i)
         bits[i] = 0;
 }
 //----------------------------------------------------------------------
 template <typename T, size_t N>
-bool BitSet_Equals (T (&a) [N], T (&b) [N]) {
+static inline bool BitSet_Equals (T (&a) [N], T (&b) [N]) {
     static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
     for (size_t i = 0; i < N; ++i)
         if (a[i] != b[i])
@@ -329,6 +356,71 @@ EntityType const * EntityType_FindByComponentSet (TypeManager const * type_manag
             if (BitSet_Equals(components.bits, ret->components.bits))
                 break;
     }
+    return ret;
+}
+//----------------------------------------------------------------------
+bool World_Create (World * out_world, TypeManager * type_manager, SizeType data_page_size) {
+    bool ret = false;
+    if (
+        out_world &&
+        type_manager &&
+        type_manager->component_type_registration_closed &&
+        type_manager->entity_type_registration_closed &&
+        type_manager->component_type_count > 0 &&
+        type_manager->entity_type_count > 0
+    ) {
+        SizeType max_component_size = 0;
+        for (auto ct = ComponentType_GetFirst(type_manager); ct; ct = ComponentType_GetNext(ct))
+            if (ct->size > max_component_size)
+                max_component_size = ct->size;
+        if (data_page_size < 4 * max_component_size)
+            data_page_size = 4 * max_component_size;
+        //SizeType page_size_shift = NextPowerOfTwo(data_page_size);
+        //data_page_size = (SizeType(1) << page_size_shift);
+
+        ComponentCount comp_count = type_manager->component_type_count;
+        SizeType entity_count = type_manager->entity_type_count;
+        SizeType entity_comp_count = entity_count * comp_count;
+
+        auto   comp_names_mem = static_cast<World::Name *>(g_alloc_zero(comp_count, sizeof(World::Name)));
+        auto   comp_types_mem = static_cast<World::PerComponentType *>(g_alloc_zero(comp_count, sizeof(World::PerComponentType)));
+        auto entity_names_mem = static_cast<World::Name *>(g_alloc_zero(entity_count, sizeof(World::Name)));
+        auto entity_types_mem = static_cast<World::PerEntityType *>(g_alloc_zero(entity_count, sizeof(World::PerEntityType)));
+        auto entity_comps_mem = static_cast<World::PerEntityComponent *>(g_alloc_zero(entity_comp_count, sizeof(World::PerEntityComponent)));
+        assert(comp_names_mem && comp_types_mem && entity_names_mem && entity_types_mem && entity_comps_mem);
+
+        *out_world = {};
+        out_world->type_manager = type_manager;
+        out_world->data_page_size = data_page_size; //SizeType(1) << page_size_shift;
+        //out_world->data_page_shift = page_size_shift;
+        //out_world->data_page_index_mask = data_page_size - 1;
+        out_world->entity_component_data = entity_comps_mem;
+
+        out_world->component_type_count = type_manager->component_type_count;
+        out_world->component_type_names = comp_names_mem;
+        out_world->component_types = comp_types_mem;
+        unsigned i = 0;
+        for (auto ct = type_manager->component_type_first; ct; (ct = ct->next), ++i) {
+            assert(i == ct->seqnum);
+            StrCpy(out_world->component_type_names[i], ct->name, sizeof(World::Name));
+            out_world->component_types[i].size = ct->size;
+            out_world->component_types[i].count_per_page = data_page_size / ct->size;
+        }
+
+        out_world->entity_type_count = type_manager->entity_type_count;
+        out_world->entity_type_names = entity_names_mem;
+        out_world->entity_types = entity_types_mem;
+        i = 0;
+        for (auto et = type_manager->entity_type_first; et; (et = et->next), ++i) {
+            assert(i == et->seqnum);
+            StrCpy(out_world->entity_type_names[i], et->name, sizeof(World::Name));
+            out_world->entity_types[i].components = et->components;
+            out_world->entity_types[i].count = et->component_count;
+        }
+
+        //...
+    }
+
     return ret;
 }
 //----------------------------------------------------------------------

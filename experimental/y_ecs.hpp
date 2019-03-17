@@ -80,24 +80,28 @@ struct World {
     bool initialized;
     TypeManager * type_manager;
     SizeType data_page_size;    // Note(yzt): Treat as constant, if you value your sanity! Also, set to a power of two (e.g. 16K.)
+    //SizeType data_page_shift;
+    //SizeType data_page_index_mask;
+    
     SizeType total_entity_count;
 
     ComponentCount component_type_count;
     Name * component_type_names;
-    struct {
+    struct PerComponentType {
         SizeType size;
         SizeType count_per_page;
     } * component_types;
 
     SizeType entity_type_count;
     Name * entity_type_names;
-    struct {
+    struct PerEntityType {
         ComponentCount count;
         ComponentBitSet components;
     } * entity_types;
 
-    struct {
+    struct PerEntityComponent {
         Byte ** page_ptrs;
+        SizeType page_calc_shift;
         SizeType page_array_size;
         SizeType pages_allocated;
         SizeType pages_in_use;
@@ -161,6 +165,8 @@ EntityType const * EntityType_GetNext (EntityType const * entity_type);
 EntityType const * EntityType_FindByName (TypeManager const * type_manager, char const * name);
 EntityType const * EntityType_FindBySeqNum (TypeManager const * type_manager, SizeType seqnum);
 EntityType const * EntityType_FindByComponentSet (TypeManager const * type_manager, ComponentBitSet const & components);
+
+bool World_Create (World * out_world, TypeManager const * type_manager, SizeType data_page_size);
 
 //----------------------------------------------------------------------
 
