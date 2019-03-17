@@ -103,10 +103,29 @@ i2s (
             added_size = 1;
         } else
             x = std::make_unsigned_t<SignedT>(v);
+
         ret = i2s(buffer + added_size, size - added_size, x, base, uppercase, digit_group_size, digit_group_sep, nul_terminate);
+
         ret.size += added_size;
     }
     return ret;
+}
+
+//----------------------------------------------------------------------
+
+template <typename Char, typename RealT>
+std::enable_if_t<
+    std::is_same_v<RealT, float> ||
+    std::is_same_v<RealT, double> ||
+    std::is_same_v<RealT, long double>,
+ToStrResult>
+f2s (
+    Char * buffer, unsigned size, RealT v,
+    unsigned digit_group_size = 0, Char digit_group_sep = '\'',
+    bool uppercase = false,
+    bool nul_terminate = false
+) {
+    frexp
 }
 
 //======================================================================

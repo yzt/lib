@@ -1,4 +1,5 @@
 #include "y_ecs.hpp"
+#include <cstdarg>
 #include <cstdlib>  // for malloc() and friends
 #include <cstring>  // strcmp()
 //======================================================================
@@ -35,6 +36,43 @@ unsigned BitSet_CountOnes (T (&bits) [N]) {
     }
     return ret;
 }
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+void BitSet_SetBit (T (&bits) [N], unsigned idx) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    if (idx < N * 8 * sizeof(T)) {
+        unsigned w = idx / (8 * sizeof(T));
+        unsigned b = idx % (8 * sizeof(T));
+        bits[w] |= T(1) << b;
+    }
+}
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+void BitSet_ClearBit (T (&bits) [N], unsigned idx) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    if (idx < N * 8 * sizeof(T)) {
+        unsigned w = idx / (8 * sizeof(T));
+        unsigned b = idx % (8 * sizeof(T));
+        bits[w] &= ~(T(1) << b);
+    }
+}
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+void BitSet_ClearAll (T (&bits) [N]) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    for (size_t i = 0; i < N; ++i)
+        bits[i] = 0;
+}
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+bool BitSet_Equals (T (&a) [N], T (&b) [N]) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    for (size_t i = 0; i < N; ++i)
+        if (a[i] != b[i])
+            return false;
+    return true;
+}
+//----------------------------------------------------------------------
 //======================================================================
 bool TypeManager_Create (TypeManager * out_type_manager) {
     bool ret = false;
@@ -116,21 +154,24 @@ ComponentType const * ComponentType_FindBySeqNum (TypeManager const * type_manag
     return ret;
 }
 //----------------------------------------------------------------------
-bool EntityType_Register (TypeManager * type_manager, char const * name, ComponentBitSet components) {
+bool EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, ComponentBitSet components) {
     bool ret = false;
     if (
         type_manager &&
         type_manager->initialized &&
+        type_manager->component_type_registration_closed &&
         !type_manager->entity_type_registration_closed &&
         !BitSet_Empty(components.bits) &&
         name &&
         ::strlen(name) > 0 &&
         ::strlen(name) <= MaxNameLen &&
-        !EntityType_NameExists(type_manager, name)
+        !EntityType_NameExists(type_manager, name) &&
+        !EntityType_ComponentSetExists(type_manager, components)
     ) {
         auto entity_type = static_cast<EntityType *>(g_alloc_zero(1, sizeof(EntityType)));
         entity_type->seqnum = type_manager->entity_type_count;
         type_manager->entity_type_count += 1;
+        entity_type->initial_capacity = initial_capacity;
         entity_type->component_count = static_cast<ComponentCount>(BitSet_CountOnes(components.bits));
         entity_type->components = components;
         entity_type->owner = type_manager;
@@ -153,24 +194,70 @@ bool EntityType_Register (TypeManager * type_manager, char const * name, Compone
     return ret;
 }
 //----------------------------------------------------------------------
-bool EntityType_Register (TypeManager * type_manager, char const * name, ComponentCount component_seqnums [], unsigned component_count) {
-    //...
-    return false;
+bool EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, ComponentCount component_seqnums [], unsigned component_count) {
+    if (!type_manager)
+        return false;
+    ComponentBitSet components;
+    BitSet_ClearAll(components.bits);
+    for (unsigned i = 0; i < component_count; ++i) {
+        if (component_seqnums[i] >= type_manager->component_type_count)
+            return false;
+        BitSet_SetBit(components.bits, component_seqnums[i]);
+    }
+    return EntityType_Register(type_manager, name, initial_capacity, components);
 }
 //----------------------------------------------------------------------
-bool EntityType_Register (TypeManager * type_manager, char const * name, char const * component_names [], unsigned component_count) {
-    //...
-    return false;
+bool EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, char const * component_names [], unsigned component_count) {
+    ComponentBitSet components;
+    BitSet_ClearAll(components.bits);
+    for (unsigned i = 0; i < component_count; ++i) {
+        auto comp_type = ComponentType_FindByName(type_manager, component_names[i]);
+        if (!comp_type)
+            return false;
+        BitSet_SetBit(components.bits, comp_type->seqnum);
+    }
+    return EntityType_Register(type_manager, name, initial_capacity, components);
 }
 //----------------------------------------------------------------------
-bool EntityType_Register_ByCompSeqnums (TypeManager * type_manager, char const * name, unsigned component_count, ...) {
-    //...
-    return false;
+bool EntityType_Register_ByCompSeqnums (TypeManager * type_manager, char const * name, SizeType initial_capacity, ...) {
+    if (!type_manager)
+        return false;
+    ComponentBitSet components;
+    BitSet_ClearAll(components.bits);
+    va_list args;
+    va_start(args, initial_capacity);
+    for (;;) {
+        int seqnum = va_arg(args, int); // FIXME(yzt): This is shit. I probably have to remove this function altogether.
+        if (seqnum < 0)
+            break;
+        if (seqnum >= type_manager->component_type_count) {
+            va_end(args);
+            return false;
+        }
+        BitSet_SetBit(components.bits, seqnum);
+    }
+    va_end(args);
+    return EntityType_Register(type_manager, name, initial_capacity, components);
 }
 //----------------------------------------------------------------------
-bool EntityType_Register_ByCompNames (TypeManager * type_manager, char const * name, unsigned component_count, ...) {
-    //...
-    return false;
+bool EntityType_Register_ByCompNames (TypeManager * type_manager, char const * name, SizeType initial_capacity, ...) {
+    ComponentBitSet components;
+    BitSet_ClearAll(components.bits);
+    va_list args;
+    va_start(args, initial_capacity);
+    for (;;) {
+        char const * component_name = va_arg(args, char const *);
+        if (nullptr == component_name)
+            break;
+        auto comp_type = ComponentType_FindByName(type_manager, component_name);
+        if (!comp_type) {
+            va_end(args);
+            return false;
+        }
+        BitSet_SetBit(components.bits, comp_type->seqnum);
+    }
+    va_end(args);
+    return EntityType_Register(type_manager, name, initial_capacity, components);
 }
 //----------------------------------------------------------------------
 bool EntityType_CloseRegisteration (TypeManager * type_manager) {
@@ -184,6 +271,10 @@ bool EntityType_CloseRegisteration (TypeManager * type_manager) {
 //----------------------------------------------------------------------
 bool EntityType_NameExists (TypeManager const * type_manager, char const * name) {
     return nullptr != EntityType_FindByName(type_manager, name);
+}
+//----------------------------------------------------------------------
+bool EntityType_ComponentSetExists (TypeManager const * type_manager, ComponentBitSet const & components) {
+    return nullptr != EntityType_FindByComponentSet(type_manager, components);
 }
 //----------------------------------------------------------------------
 bool EntityType_IsRegistrationClosed (TypeManager const * type_manager) {
@@ -226,6 +317,16 @@ EntityType const * EntityType_FindBySeqNum (TypeManager const * type_manager, Si
     if (type_manager && type_manager->initialized) {
         for (ret = type_manager->entity_type_first; ret; ret = ret->next)
             if (seqnum == ret->seqnum)
+                break;
+    }
+    return ret;
+}
+//----------------------------------------------------------------------
+EntityType const * EntityType_FindByComponentSet (TypeManager const * type_manager, ComponentBitSet const & components) {
+    EntityType const * ret = nullptr;
+    if (type_manager && type_manager->initialized) {
+        for (ret = type_manager->entity_type_first; ret; ret = ret->next)
+            if (BitSet_Equals(components.bits, ret->components.bits))
                 break;
     }
     return ret;

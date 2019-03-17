@@ -47,31 +47,9 @@ struct ComponentType {
     //ComponentType * prev = nullptr;
 };
 
-// Note(yzt): Component types (e.g. MyComponent) must inherit from 
-//      Ex::ComponentBase<MyComponent>
-// Note(yzt): Also, you must declare a "static char const * GetComponentName()"
-//      public function that returns a unique name (you probably can/should
-//      use either the qualified, or unqualified type name.)
-//      In practice, writing it like this is best:
-//          static char const * GetComponentName () {return "MyComponent";}
-template <typename T>
-struct ComponentBase {
-public:
-    static ComponentType const & GetComponentType () {
-        return s_component_type;
-    }
-private:
-    template <typename T>
-    friend bool ComponentType_Register (TypeManager *);
-    
-    static ComponentType s_component_type;
-};
-template <typename T>
-ComponentType ComponentBase<T>::s_component_type;
-
-
 struct EntityType {
     SizeType seqnum = SizeType(~SizeType(0));
+    SizeType initial_capacity = 0;
     ComponentCount component_count = 0;
     ComponentBitSet components;
     
@@ -127,6 +105,29 @@ struct World {
     } * entity_component_data;
 };
 
+
+// Note(yzt): Component types (e.g. MyComponent) must inherit from 
+//      Ex::ComponentBase<MyComponent>
+// Note(yzt): Also, you must declare a "static char const * GetComponentName()"
+//      public function that returns a unique name (you probably can/should
+//      use either the qualified, or unqualified type name.)
+//      In practice, writing it like this is best:
+//          static char const * GetComponentName () {return "MyComponent";}
+template <typename T>
+struct ComponentBase {
+public:
+    static ComponentType const & GetComponentType () {
+        return s_component_type;
+    }
+private:
+    template <typename T>
+    friend bool ComponentType_Register (TypeManager *);
+    
+    static ComponentType s_component_type;
+};
+template <typename T>
+ComponentType ComponentBase<T>::s_component_type;
+
 //----------------------------------------------------------------------
 // Functions:
 //----------------------------------------------------------------------
@@ -145,19 +146,21 @@ ComponentType const * ComponentType_GetNext (ComponentType const * component_typ
 ComponentType const * ComponentType_FindByName (TypeManager const * type_manager, char const * name);
 ComponentType const * ComponentType_FindBySeqNum (TypeManager const * type_manager, ComponentCount seqnum);
 
-bool EntityType_Register (TypeManager * type_manager, char const * name, ComponentBitSet components);   // This is the main one, but you should use one of the other, more convenient functions.
-bool EntityType_Register (TypeManager * type_manager, char const * name, ComponentCount component_seqnums [], unsigned component_count);
-bool EntityType_Register (TypeManager * type_manager, char const * name, char const * component_names [], unsigned component_count);
-bool EntityType_Register_ByCompSeqnums (TypeManager * type_manager, char const * name, unsigned component_count, ...);
-bool EntityType_Register_ByCompNames (TypeManager * type_manager, char const * name, unsigned component_count, ...);
+bool EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, ComponentBitSet components);   // This is the main one, but you should use one of the other, more convenient functions.
+bool EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, ComponentCount component_seqnums [], unsigned component_count);
+bool EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, char const * component_names [], unsigned component_count);
+bool EntityType_Register_ByCompSeqnums (TypeManager * type_manager, char const * name, SizeType initial_capacity, ...); // End with -1
+bool EntityType_Register_ByCompNames (TypeManager * type_manager, char const * name, SizeType initial_capacity, ...); // end with nullptr
 bool EntityType_CloseRegisteration (TypeManager * type_manager);
 bool EntityType_NameExists (TypeManager const * type_manager, char const * name);
+bool EntityType_ComponentSetExists (TypeManager const * type_manager, ComponentBitSet const & components);
 bool EntityType_IsRegistrationClosed (TypeManager const * type_manager);
 SizeType EntityType_Count (TypeManager const * type_manager);
 EntityType const * EntityType_GetFirst (TypeManager const * type_manager);
 EntityType const * EntityType_GetNext (EntityType const * entity_type);
 EntityType const * EntityType_FindByName (TypeManager const * type_manager, char const * name);
 EntityType const * EntityType_FindBySeqNum (TypeManager const * type_manager, SizeType seqnum);
+EntityType const * EntityType_FindByComponentSet (TypeManager const * type_manager, ComponentBitSet const & components);
 
 //----------------------------------------------------------------------
 
@@ -180,7 +183,11 @@ bool ComponentType_Register (TypeManager * type_manager) {
     //static_assert(std::is_same_v<std::invoke_result_t<T::GetComponentName>, char const *>, "A component type should have a \"static char const * GetComponentName()\" method.");
 
     bool ret = false;
+
     char const * const & name = T::GetComponentName();
+    SizeType name_len = 0;
+    if (name) {for (auto p = name; *p; ++p, ++name_len);}
+
     ComponentType * comp_type = &T::s_component_type;
     if (
         type_manager &&
@@ -191,8 +198,8 @@ bool ComponentType_Register (TypeManager * type_manager) {
         !comp_type->next &&
         //!comp_type->prev &&
         nullptr != name &&
-        ::strlen(name) > 0 &&
-        ::strlen(name) <= MaxNameLen &&
+        name_len > 0 &&
+        name_len <= MaxNameLen &&
         !ComponentType_NameExists(type_manager, name)
     ) {
         comp_type->seqnum = type_manager->component_type_count;
