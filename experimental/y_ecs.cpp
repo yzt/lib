@@ -8,9 +8,15 @@ namespace y {
 namespace Ex {
 //======================================================================
 auto g_alloc = ::malloc;
-auto g_alloc_zero = ::calloc;
+//auto g_alloc_zero = ::calloc;
 auto g_realloc = ::realloc;
 auto g_dealloc = ::free;
+void * g_alloc_zero (size_t size) {
+    void * ret = g_alloc(size);
+    if (ret)
+        ::memset(ret, 0, size);
+    return ret;
+}
 //======================================================================
 //static SizeType EntityType_CalcSize (ComponentCount component_count) {
 //    return SizeType(sizeof(EntityType) + component_count * sizeof(/**/ComponentCount/*/EntityType{}.component_seqnums[0]/**/));
@@ -97,6 +103,32 @@ static inline bool BitSet_Equals (T (&a) [N], T (&b) [N]) {
     for (size_t i = 0; i < N; ++i)
         if (a[i] != b[i])
             return false;
+    return true;
+}
+//----------------------------------------------------------------------
+//----------------------------------------------------------------------
+bool PagedArray_InitEmpty (World::PerEntityComponent * array) {
+    *array = {};
+    return true;
+}
+//----------------------------------------------------------------------
+bool PagedArray_InitReserve (World::PerEntityComponent * array, SizeType page_size, SizeType initial_pages) {
+    if (initial_pages > 0) {
+        array->page_ptrs = static_cast<Byte **>(g_alloc(initial_pages * sizeof(Byte *)));
+        if (!array->page_ptrs)
+            return false;
+        for (SizeType i = 0; i < initial_pages; ++i) {
+            array->page_ptrs[i] = static_cast<Byte *>(g_alloc_zero(page_size));
+            if (!array->page_ptrs[i])
+                return false;
+        }
+        array->page_array_size = initial_pages;
+        array->pages_allocated = initial_pages;
+        array->pages_in_use = 0;
+        array->elements_in_last_page = 0;
+    } else {
+        *array = {};
+    }
     return true;
 }
 //----------------------------------------------------------------------
@@ -195,7 +227,7 @@ bool EntityType_Register (TypeManager * type_manager, char const * name, SizeTyp
         !EntityType_NameExists(type_manager, name) &&
         !EntityType_ComponentSetExists(type_manager, components)
     ) {
-        auto entity_type = static_cast<EntityType *>(g_alloc_zero(1, sizeof(EntityType)));
+        auto entity_type = static_cast<EntityType *>(g_alloc_zero(sizeof(EntityType)));
         entity_type->seqnum = type_manager->entity_type_count;
         type_manager->entity_type_count += 1;
         entity_type->initial_capacity = initial_capacity;
@@ -382,11 +414,11 @@ bool World_Create (World * out_world, TypeManager * type_manager, SizeType data_
         SizeType entity_count = type_manager->entity_type_count;
         SizeType entity_comp_count = entity_count * comp_count;
 
-        auto   comp_names_mem = static_cast<World::Name *>(g_alloc_zero(comp_count, sizeof(World::Name)));
-        auto   comp_types_mem = static_cast<World::PerComponentType *>(g_alloc_zero(comp_count, sizeof(World::PerComponentType)));
-        auto entity_names_mem = static_cast<World::Name *>(g_alloc_zero(entity_count, sizeof(World::Name)));
-        auto entity_types_mem = static_cast<World::PerEntityType *>(g_alloc_zero(entity_count, sizeof(World::PerEntityType)));
-        auto entity_comps_mem = static_cast<World::PerEntityComponent *>(g_alloc_zero(entity_comp_count, sizeof(World::PerEntityComponent)));
+        auto   comp_names_mem = static_cast<World::Name *>(g_alloc_zero(comp_count * sizeof(World::Name)));
+        auto   comp_types_mem = static_cast<World::PerComponentType *>(g_alloc_zero(comp_count * sizeof(World::PerComponentType)));
+        auto entity_names_mem = static_cast<World::Name *>(g_alloc_zero(entity_count * sizeof(World::Name)));
+        auto entity_types_mem = static_cast<World::PerEntityType *>(g_alloc_zero(entity_count * sizeof(World::PerEntityType)));
+        auto entity_comps_mem = static_cast<World::PerEntityComponent *>(g_alloc_zero(entity_comp_count * sizeof(World::PerEntityComponent)));
         assert(comp_names_mem && comp_types_mem && entity_names_mem && entity_types_mem && entity_comps_mem);
 
         *out_world = {};

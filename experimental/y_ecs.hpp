@@ -8,13 +8,6 @@ namespace y {
 
 using Byte = uint8_t;
 
-template <typename T>
-struct Buffer {
-    T * ptr;
-    uint32_t len;
-    uint32_t cap;
-};
-
 }   // namespace y
 
 namespace y {
@@ -95,20 +88,20 @@ struct World {
     SizeType entity_type_count;
     Name * entity_type_names;
     struct PerEntityType {
-        ComponentCount count;
         ComponentBitSet components;
+        ComponentCount count;
     } * entity_types;
 
     struct PerEntityComponent {
         Byte ** page_ptrs;
-        SizeType page_calc_shift;
+        /** IDIOT **/ //SizeType page_calc_shift;   // If page size is e.g. 16384, this will be 14
+        /** IDIOT **/ //SizeType page_calc_mask;    // If page size is e.g. 16384, this will be 0x00003FFF
         SizeType page_array_size;
-        SizeType pages_allocated;
-        SizeType pages_in_use;
+        SizeType pages_allocated;   // FIXME(yzt): Do we need this? The pointers being nullptr might be enough.
+        SizeType pages_in_use;  // FIXME(yzt): Should I change this to something like "full_pages"?
         SizeType elements_in_last_page;
     } * entity_component_data;
 };
-
 
 // Note(yzt): Component types (e.g. MyComponent) must inherit from 
 //      Ex::ComponentBase<MyComponent>
