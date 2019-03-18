@@ -89,7 +89,8 @@ struct World {
     Name * entity_type_names;
     struct PerEntityType {
         ComponentBitSet components;
-        ComponentCount count;
+        ComponentCount component_count;
+        SizeType entity_count;
     } * entity_types;
 
     struct PerEntityComponent {
@@ -98,9 +99,9 @@ struct World {
         /** IDIOT **/ //SizeType page_calc_mask;    // If page size is e.g. 16384, this will be 0x00003FFF
         SizeType page_array_size;
         SizeType pages_allocated;   // FIXME(yzt): Do we need this? The pointers being nullptr might be enough.
-        SizeType pages_in_use;  // FIXME(yzt): Should I change this to something like "full_pages"?
+        SizeType pages_in_use;      // FIXME(yzt): Should I change this to something like "full_pages"?
         SizeType elements_in_last_page;
-    } * entity_component_data;
+    } * entity_component_data;      // NOTE(yzt): The ComponentTypes of each EntityType are laid together, i.e. element 0 is the 1st component type of the 1st entity type, element 1 is the 2nd component type of the 1st entity type, etc.
 };
 
 // Note(yzt): Component types (e.g. MyComponent) must inherit from 
@@ -113,14 +114,11 @@ struct World {
 template <typename T>
 struct ComponentBase {
 public:
-    static ComponentType const & GetComponentType () {
-        return s_component_type;
-    }
+    static ComponentType const & GetComponentType () {return s_component_type;}
 private:
+    static ComponentType s_component_type;
     template <typename T>
     friend bool ComponentType_Register (TypeManager *);
-    
-    static ComponentType s_component_type;
 };
 template <typename T>
 ComponentType ComponentBase<T>::s_component_type;
@@ -160,6 +158,8 @@ EntityType const * EntityType_FindBySeqNum (TypeManager const * type_manager, Si
 EntityType const * EntityType_FindByComponentSet (TypeManager const * type_manager, ComponentBitSet const & components);
 
 bool World_Create (World * out_world, TypeManager const * type_manager, SizeType data_page_size);
+bool World_Destroy (World * world);
+bool World_GatherMemoryStats (World const * world, size_t * out_total_bytes, size_t * out_overhead_bytes, size_t * out_used_bytes, size_t * out_usable_bytes, size_t * out_unusable_bytes);
 
 //----------------------------------------------------------------------
 

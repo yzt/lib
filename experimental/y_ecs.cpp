@@ -10,12 +10,15 @@ namespace Ex {
 auto g_alloc = ::malloc;
 //auto g_alloc_zero = ::calloc;
 auto g_realloc = ::realloc;
-auto g_dealloc = ::free;
+//auto g_dealloc = ::free;
 void * g_alloc_zero (size_t size) {
     void * ret = g_alloc(size);
     if (ret)
         ::memset(ret, 0, size);
     return ret;
+}
+void g_dealloc (void * ptr, size_t /*size*/) {
+    ::free(ptr);
 }
 //======================================================================
 //static SizeType EntityType_CalcSize (ComponentCount component_count) {
@@ -106,6 +109,15 @@ static inline bool BitSet_Equals (T (&a) [N], T (&b) [N]) {
     return true;
 }
 //----------------------------------------------------------------------
+template <typename T, size_t N>
+static inline T BitSet_GetBit (T (&a) [N], unsigned idx) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    assert(idx < N * 8 * sizeof(T));
+    unsigned w = idx / (8 * sizeof(T));
+    unsigned b = idx % (8 * sizeof(T));
+    return (bits[w] >> b) & 1;
+}
+//----------------------------------------------------------------------
 //----------------------------------------------------------------------
 bool PagedArray_InitEmpty (World::PerEntityComponent * array) {
     *array = {};
@@ -126,10 +138,32 @@ bool PagedArray_InitReserve (World::PerEntityComponent * array, SizeType page_si
         array->pages_allocated = initial_pages;
         array->pages_in_use = 0;
         array->elements_in_last_page = 0;
+        return true;
     } else {
-        *array = {};
+        return PagedArray_InitEmpty(array);
     }
-    return true;
+}
+//----------------------------------------------------------------------
+bool PagedArray_Clear (World::PerEntityComponent * array, SizeType page_size) {
+    bool ret = false;
+    if (array) {
+        if (array->page_ptrs) {
+            assert(array->page_array_size > 0);
+            for (SizeType i = 0; i < array->page_array_size && array->page_ptrs[i]; ++i)
+                g_dealloc(array->page_ptrs[i], page_size);
+            g_dealloc(array->page_ptrs, array->page_array_size * sizeof(Byte *));
+            PagedArray_InitEmpty(array);
+        } else {
+            assert(
+                0 == array->page_array_size &&
+                0 == array->pages_allocated &&
+                0 == array->pages_in_use &&
+                0 == array->elements_in_last_page
+            );
+        }
+        ret = true;
+    }
+    return ret;
 }
 //----------------------------------------------------------------------
 //======================================================================
@@ -148,7 +182,7 @@ void TypeManager_Destroy (TypeManager * type_manager) {
         auto p = type_manager->entity_type_first;
         while (p) {
             auto q = p->next;
-            g_dealloc(p);   // size is EntityType_CalcSize(p->component_count)
+            g_dealloc(p, sizeof(EntityType));   // size is EntityType_CalcSize(p->component_count)
             p = q;
         }
         *type_manager = {};
@@ -447,12 +481,64 @@ bool World_Create (World * out_world, TypeManager * type_manager, SizeType data_
             assert(i == et->seqnum);
             StrCpy(out_world->entity_type_names[i], et->name, sizeof(World::Name));
             out_world->entity_types[i].components = et->components;
-            out_world->entity_types[i].count = et->component_count;
+            out_world->entity_types[i].component_count = et->component_count;
+            out_world->entity_types[i].entity_count = 0;
         }
 
-        //...
+        auto et = type_manager->entity_type_first;
+        for (unsigned entity_type_idx = 0, i = 0; entity_type_idx < out_world->entity_type_count; ++entity_type_idx, (et = et->next)) {
+            for (unsigned comp_type_idx = 0; comp_type_idx < out_world->component_type_count; ++comp_type_idx, ++i) {
+                if (BitSet_GetBit(out_world->entity_types[entity_type_idx].components.bits, comp_type_idx)) {
+                    auto comps_per_page = out_world->component_types[comp_type_idx].count_per_page;
+                    PagedArray_InitReserve(
+                        out_world->entity_component_data + i,
+                        out_world->data_page_size,
+                        (et->initial_capacity + comps_per_page - 1) / comps_per_page
+                    );
+                }
+            }
+        }
+
+        ret = true;
     }
 
+    return ret;
+}
+//----------------------------------------------------------------------
+bool World_Destroy (World * world) {
+    bool ret = false;
+    if (world) {
+        for (SizeType i = 0, n = world->component_type_count * world->entity_type_count; i < n; ++i)
+            PagedArray_Clear(world->entity_component_data + i, world->data_page_size);
+        g_dealloc(world->entity_component_data, world->component_type_count * world->entity_type_count * sizeof(World::PerEntityComponent));
+        g_dealloc(world->entity_types, world->entity_type_count * sizeof(World::PerEntityType));
+        g_dealloc(world->entity_type_names, world->entity_type_count * sizeof(World::Name));
+        g_dealloc(world->component_types, world->component_type_count * sizeof(World::PerComponentType));
+        g_dealloc(world->component_type_names, world->component_type_count * sizeof(World::Name));
+        *world = {};
+        ret = true;
+    }
+    return ret;
+}
+//----------------------------------------------------------------------
+bool World_GatherMemoryStats (World const * world, size_t * out_total_bytes, size_t * out_overhead_bytes, size_t * out_used_bytes, size_t * out_usable_bytes, size_t * out_unusable_bytes) {
+    bool ret = false;
+    if (world) {
+        size_t total = 0, overhead = 0, used = 0, usable = 0, unusable = 0;
+        auto add_to_overhead = [&](size_t x){overhead += x; total += x;};
+        auto add_to_used = [&](size_t x){used += x; total += x;};
+        auto add_to_usable = [&](size_t x){usable += x; total += x;};
+        auto add_to_unusable = [&](size_t x){unusable += x; total += x;};
+
+        add_to_overhead(sizeof(*world));
+        add_to_overhead(world->component_type_count * sizeof(World::PerComponentType));
+        add_to_overhead(world->component_type_count * sizeof(World::Name));
+        add_to_overhead(world->entity_type_count * sizeof(World::PerEntityType));
+        add_to_overhead(world->entity_type_count * sizeof(World::Name));
+        add_to_overhead(world->component_type_count * world->entity_type_count * sizeof(World::PerEntityComponent));
+
+        //......
+    }
     return ret;
 }
 //----------------------------------------------------------------------
