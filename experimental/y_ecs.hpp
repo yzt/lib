@@ -71,7 +71,7 @@ struct World {
     using Name = char [MaxNameLen + 1];
 
     bool initialized;
-    TypeManager * type_manager;
+    TypeManager const * type_manager;
     SizeType data_page_size;    // Note(yzt): Treat as constant, if you value your sanity! Also, set to a power of two (e.g. 16K.)
     //SizeType data_page_shift;
     //SizeType data_page_index_mask;
@@ -159,7 +159,22 @@ EntityType const * EntityType_FindByComponentSet (TypeManager const * type_manag
 
 bool World_Create (World * out_world, TypeManager const * type_manager, SizeType data_page_size);
 bool World_Destroy (World * world);
-bool World_GatherMemoryStats (World const * world, size_t * out_total_bytes, size_t * out_overhead_bytes, size_t * out_used_bytes, size_t * out_usable_bytes, size_t * out_unusable_bytes);
+
+struct WorldMemoryStats {
+    bool valid;
+    
+    size_t page_size_bytes;
+    size_t total_component_groups;
+    size_t active_component_groups;
+    size_t faulty_component_groups;
+
+    size_t total_bytes;
+    size_t overhead_bytes;
+    size_t used_bytes;
+    size_t usable_bytes;
+    size_t unusable_bytes;
+};
+WorldMemoryStats World_GatherMemoryStats (World const * world);
 
 //----------------------------------------------------------------------
 
