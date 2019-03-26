@@ -19,25 +19,38 @@ using SizeType = uint32_t;
 
 constexpr SizeType MaxNameLen = 63;
 constexpr ComponentCount MaxComponentsPerEntityType = 128;
+constexpr ComponentCount MaxTagsPerEntityType = 64;
 
 struct TypeManager;
 
-struct ComponentBitSet {
+template <SizeType BitCount>
+struct BitSet {
     using Word = uint64_t;
-    static constexpr SizeType Count = (MaxComponentsPerEntityType + 8 * sizeof(Word) - 1) / (8 * sizeof(Word));
+    static constexpr SizeType Count = (BitCount + 8 * sizeof(Word) - 1) / (8 * sizeof(Word));
 
     Word bits [Count];
 };
+
+using ComponentBitSet = BitSet<MaxComponentsPerEntityType>;
+using TagBitSet = BitSet<MaxTagsPerEntityType>;
 
 struct ComponentType {
     bool registered = false;
     ComponentCount seqnum = ComponentCount(~0);
     SizeType size = 0;
-
     TypeManager * owner = nullptr;
     char name [MaxNameLen + 1] = {0};
     ComponentType * next = nullptr;
     //ComponentType * prev = nullptr;
+};
+
+struct TagType {
+    bool registered = false;
+    ComponentCount seqnum = ComponentCount(~0);
+    TypeManager * owner = nullptr;
+    char name [MaxNameLen + 1] = {0};
+    TagType * next = nullptr;
+    //TagType * prev = nullptr;
 };
 
 struct EntityType {
@@ -45,7 +58,6 @@ struct EntityType {
     SizeType initial_capacity = 0;
     ComponentCount component_count = 0;
     ComponentBitSet components;
-    
     TypeManager * owner = nullptr;
     char name [MaxNameLen + 1] = {0};
     EntityType * next = nullptr;
@@ -70,8 +82,8 @@ struct TypeManager {
 struct World {
     using Name = char [MaxNameLen + 1];
 
-    bool initialized;
-    TypeManager const * type_manager;
+    //bool initialized;
+    //TypeManager const * type_manager;
     SizeType data_page_size;    // Note(yzt): Treat as constant, if you value your sanity! Also, set to a power of two (e.g. 16K.)
     //SizeType data_page_shift;
     //SizeType data_page_index_mask;
@@ -123,6 +135,21 @@ private:
 template <typename T>
 ComponentType ComponentBase<T>::s_component_type;
 
+struct WorldMemoryStats {
+    bool valid;
+    
+    size_t page_size_bytes;
+    size_t total_component_groups;
+    size_t active_component_groups;
+    size_t faulty_component_groups;
+
+    size_t total_bytes;
+    size_t overhead_bytes;
+    size_t used_bytes;
+    size_t usable_bytes;
+    size_t unusable_bytes;
+};
+
 //----------------------------------------------------------------------
 // Functions:
 //----------------------------------------------------------------------
@@ -159,22 +186,19 @@ EntityType const * EntityType_FindByComponentSet (TypeManager const * type_manag
 
 bool World_Create (World * out_world, TypeManager const * type_manager, SizeType data_page_size);
 bool World_Destroy (World * world);
-
-struct WorldMemoryStats {
-    bool valid;
-    
-    size_t page_size_bytes;
-    size_t total_component_groups;
-    size_t active_component_groups;
-    size_t faulty_component_groups;
-
-    size_t total_bytes;
-    size_t overhead_bytes;
-    size_t used_bytes;
-    size_t usable_bytes;
-    size_t unusable_bytes;
-};
 WorldMemoryStats World_GatherMemoryStats (World const * world);
+
+struct QueryResult {
+    bool valid;
+    SizeType entity_type_count;
+    SizeType entity_types [];
+};
+QueryResult World_QueryEntities (
+    ComponentBitSet const & components_read,
+    ComponentBitSet const & components_written,
+    TagBitSet const & tags_required,
+    ComponentBitSet const & components_read_optional
+);
 
 //----------------------------------------------------------------------
 

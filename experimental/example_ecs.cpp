@@ -52,15 +52,15 @@ struct Compo {
     char const * name;
     size_t size;
     size_t field_count;
-    Field * fields;
+    Field const * fields;
     Compo * next;
 };
 
 #define EX_STRUCT_BEG(name_, desc_)                                         \
     struct name_ : ::y::Ex::ComponentBase<name_> {                          \
         static constexpr char const * GetComponentName() {return #name_;}   \
-        static Compo s_compo;                                               \
-        static Field s_fields [];                                           \
+        static Compo const s_compo;                                         \
+        static Field const s_fields [];                                     \
     /**/
 #define EX_STRUCT_FLD(struct_, type_, name_, desc_)                         \
         EX_COMP_ACTUAL_TYPE_OF_ ## type_ name_;                             \
@@ -73,7 +73,7 @@ struct Compo {
     /**/
 
 #define EX_STATIX_BEG(name_, desc_)                                         \
-    Field name_::s_fields [] = {                                            \
+    inline Field const name_::s_fields [] = {                               \
     /**/
 #define EX_STATIX_FLD(struct_, type_, name_, desc_)                         \
         {Type::type_, offsetof(struct_, name_),                             \
@@ -85,7 +85,7 @@ struct Compo {
     /**/
 #define EX_STATIX_END(name_)                                                \
     };                                                                      \
-    Compo name_::s_compo {                                                  \
+    inline Compo const name_::s_compo {                                     \
         #name_, sizeof(name_),                                              \
         sizeof(name_::s_fields) / sizeof(name_::s_fields[0]),               \
         name_::s_fields, nullptr                                            \
@@ -98,18 +98,18 @@ struct Compo {
     /**/
 
 struct YYY {
-    static Compo compo;
-    static Field fields [];
+    static Compo const compo;
+    static Field const fields [];
 
     float x, y, z;
 };
 
-Field YYY::fields [] = {
+inline Field const YYY::fields [] = {
     {Type::F32, offsetof(YYY, x), sizeof(YYY::x), "x", "X Coordinate"},
     {Type::F32, offsetof(YYY, y), sizeof(YYY::y), "y", "Y Coordinate"},
     {Type::F32, offsetof(YYY, z), sizeof(YYY::z), "z", "Z Coordinate"},
 };
-Compo YYY::compo {"YYY", sizeof(YYY), sizeof(YYY::fields) / sizeof(YYY::fields[0]), YYY::fields, nullptr};
+inline Compo const YYY::compo {"YYY", sizeof(YYY), sizeof(YYY::fields) / sizeof(YYY::fields[0]), YYY::fields, nullptr};
 
 //
 //inline bool StaticRegisterStructField (size_t offset, size_t size, char const * name, Type type, Field * fields, unsigned * count, unsigned max_count) {

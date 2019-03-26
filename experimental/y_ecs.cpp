@@ -468,7 +468,7 @@ bool World_Create (World * out_world, TypeManager const * type_manager, SizeType
         assert(comp_names_mem && comp_types_mem && entity_names_mem && entity_types_mem && entity_comps_mem);
 
         *out_world = {};
-        out_world->type_manager = type_manager;
+        //out_world->type_manager = type_manager;
         out_world->data_page_size = data_page_size; //SizeType(1) << page_size_shift;
         //out_world->data_page_shift = page_size_shift;
         //out_world->data_page_index_mask = data_page_size - 1;
@@ -512,6 +512,7 @@ bool World_Create (World * out_world, TypeManager const * type_manager, SizeType
                 }
             }
         }
+        //out_world->initialized = true;
 
         ret = true;
     }
@@ -524,7 +525,7 @@ bool World_Destroy (World * world) {
     if (world) {
         for (SizeType i = 0, n = world->component_type_count * world->entity_type_count; i < n; ++i)
             PagedArray_Clear(world->entity_component_data + i, world->data_page_size);
-        g_dealloc(world->entity_component_data, world->component_type_count * world->entity_type_count * sizeof(World::PerEntityComponent));
+        g_dealloc(world->entity_component_data, sizeof(World::PerEntityComponent) * world->component_type_count * world->entity_type_count);
         g_dealloc(world->entity_types, world->entity_type_count * sizeof(World::PerEntityType));
         g_dealloc(world->entity_type_names, world->entity_type_count * sizeof(World::Name));
         g_dealloc(world->component_types, world->component_type_count * sizeof(World::PerComponentType));
@@ -544,14 +545,14 @@ WorldMemoryStats World_GatherMemoryStats (World const * world) {
         //auto add_to_unusable = [&](size_t x){ret.unusable_bytes += x;};
 
         ret.page_size_bytes = world->data_page_size;
-        ret.total_component_groups = world->component_type_count * world->entity_type_count;
+        ret.total_component_groups = size_t(world->component_type_count) * world->entity_type_count;
 
         add_to_overhead_and_total(sizeof(*world));
-        add_to_overhead_and_total(world->component_type_count * sizeof(World::PerComponentType));
-        add_to_overhead_and_total(world->component_type_count * sizeof(World::Name));
-        add_to_overhead_and_total(world->entity_type_count * sizeof(World::PerEntityType));
-        add_to_overhead_and_total(world->entity_type_count * sizeof(World::Name));
-        add_to_overhead_and_total(world->component_type_count * world->entity_type_count * sizeof(World::PerEntityComponent));
+        add_to_overhead_and_total(sizeof(World::PerComponentType) * world->component_type_count);
+        add_to_overhead_and_total(sizeof(World::Name) * world->component_type_count);
+        add_to_overhead_and_total(sizeof(World::PerEntityType) * world->entity_type_count);
+        add_to_overhead_and_total(sizeof(World::Name) * world->entity_type_count);
+        add_to_overhead_and_total(sizeof(World::PerEntityComponent) * world->component_type_count * world->entity_type_count);
 
         for (unsigned entity_type_idx = 0, i = 0; entity_type_idx < world->entity_type_count; ++entity_type_idx) {
             auto et = world->entity_types + entity_type_idx;
@@ -561,10 +562,10 @@ WorldMemoryStats World_GatherMemoryStats (World const * world) {
                 if (BitSet_GetBit(et->components.bits, comp_type_idx)) {
                     ret.active_component_groups += 1;
                     add_to_overhead_and_total(ecd->page_array_size * sizeof(*ecd->page_ptrs));
-                    ret.total_bytes += ecd->pages_allocated * world->data_page_size;
-                    ret.used_bytes += et->entity_count * ct->size;
-                    ret.usable_bytes += (ecd->pages_allocated * ct->count_per_page - et->entity_count) * ct->size;
-                    ret.unusable_bytes += ecd->pages_allocated * (world->data_page_size - ct->count_per_page * ct->size);
+                    ret.total_bytes += size_t(ecd->pages_allocated) * world->data_page_size;
+                    ret.used_bytes += size_t(et->entity_count) * ct->size;
+                    ret.usable_bytes += (size_t(ecd->pages_allocated) * ct->count_per_page - et->entity_count) * ct->size;
+                    ret.unusable_bytes += size_t(ecd->pages_allocated) * (world->data_page_size - ct->count_per_page * ct->size);
                 } else {
                     if (!PagedArray_IsClear(ecd))
                         ret.faulty_component_groups += 1;
