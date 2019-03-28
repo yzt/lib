@@ -71,10 +71,10 @@ GetOccupiedFromHeader (uint8_t const * ptr) {
     return 0 != (p->size_and_occupied & 1);
 }
 
-static inline uint8_t const *
-GetFooterAddressFromHeader (uint8_t const * ptr) {
-    return ptr + sizeof(Header) + GetSizeFromHeader(ptr);
-}
+//static inline uint8_t const *
+//GetFooterAddressFromHeader (uint8_t const * ptr) {
+//    return ptr + sizeof(Header) + GetSizeFromHeader(ptr);
+//}
 
 static inline uint8_t *
 GetFooterAddressFromHeader (uint8_t * ptr) {
@@ -96,10 +96,10 @@ GetOccupiedFromFooter (uint8_t const * ptr) {
     return GetOccupiedFromHeader(ptr);
 }
 
-static inline uint8_t const *
-GetHeaderAddressFromFooter (uint8_t const * ptr) {
-    return ptr - GetSizeFromFooter(ptr) - sizeof(Header);
-}
+//static inline uint8_t const *
+//GetHeaderAddressFromFooter (uint8_t const * ptr) {
+//    return ptr - GetSizeFromFooter(ptr) - sizeof(Header);
+//}
 
 static inline uint8_t *
 GetHeaderAddressFromFooter (uint8_t * ptr) {

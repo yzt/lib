@@ -227,7 +227,8 @@ void * Fiber_GetMyNativeHandle () {
 }
 
 #else	// Hopefully (almost) POSIX!
-
+// FIXME
+#define _XOPEN_SOURCE
 #include <ucontext.h>
 
 struct fiber_internal_t {
@@ -307,7 +308,7 @@ void InternalFiberProcWrapper (int p0, int p1) {
     auto param = static_cast<fiber_internal_t *>(reinterpret_cast<void *>(uintptr_t(u)));
 
     if (param && param->proc && param->sys) {
-        param->proc(param, param->user_data);
+        param->proc(param);
         FIBER_ASSERT(
             false, param->sys,
             "Shouldn't have reached this point! Note that you must not return from a fiber proc."

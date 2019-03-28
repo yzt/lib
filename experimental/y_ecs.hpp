@@ -129,7 +129,7 @@ public:
     static ComponentType const & GetComponentType () {return s_component_type;}
 private:
     static ComponentType s_component_type;
-    template <typename T>
+    template <typename>
     friend bool ComponentType_Register (TypeManager *);
 };
 template <typename T>

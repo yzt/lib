@@ -10,15 +10,23 @@
     #include <ws2tcpip.h>
     #include <WinSock2.h>
     #include <Windows.h>
+    typedef int socklen_t;
     #define Y_SOCKET_ERROR__WOULD_BLOCK     WSAEWOULDBLOCK
     #if Y_FEATURE_COMPILER_MSVC
         #pragma comment (lib, "ws2_32")
     #endif
 #elif defined(Y_FEATURE_OS_POSIX)
-    #define <sys/socket.h>
-    #define <netinet/in.h>
+    #include <errno.h>
+    #include <fcntl.h>
+    #include <unistd.h>
+    #include <sys/socket.h>
+    #include <arpa/inet.h>
+    #include <netinet/in.h>
     typedef size_t SOCKET;
+    typedef linger LINGER;
+    typedef sa_family_t ADDRESS_FAMILY;
     #define INVALID_SOCKET                  (~0)
+    #define SOCKET_ERROR                    -1
     #define closesocket(s)                  close(s)
     #define Y_SOCKET_ERROR__WOULD_BLOCK     EWOULDBLOCK     // ?
 #else
@@ -42,7 +50,7 @@ namespace y {
     }
 #else
     inline int Initialize () {return 0;}
-    inline int CleanUp () {return 0;}
+    inline int Cleanup () {return 0;}
     inline int GetTheError () {return errno;}  // FIXME(yzt): Is this correct?
     inline bool SetBlockingMode (SOCKET sock, bool should_be_blocking) {
         int nonBlocking = (should_be_blocking ? 0 : 1);
@@ -91,15 +99,15 @@ struct Address {
         Address ret = {};
         auto in = ret.asIPv4();
         in->sin_family = AF_INET;
-        in->sin_port = ::htons(port);
-        in->sin_addr.s_addr = ::htonl(ip);
+        in->sin_port = htons(port);
+        in->sin_addr.s_addr = htonl(ip);
         return ret;
     }
     static Address IPv4 (char const * dotted_ip, U16 port) {
         Address ret = {};
         auto in = ret.asIPv4();
         in->sin_family = AF_INET;
-        in->sin_port = ::htons(port);
+        in->sin_port = htons(port);
         in->sin_addr.s_addr = ::inet_addr(dotted_ip);   // NOTE(yzt): So sue me!
         return ret;
     }
@@ -116,20 +124,20 @@ struct Address {
         Address ret = {};
         auto in = ret.asIPv4();
         in->sin_family = AF_INET;
-        in->sin_port = ::htons(port);
-        in->sin_addr.s_addr = ::htonl(INADDR_ANY);
+        in->sin_port = htons(port);
+        in->sin_addr.s_addr = htonl(INADDR_ANY);
         return ret;
     }
     static Address IPv4Loopback (U16 port) {
         Address ret = {};
         auto in = ret.asIPv4();
         in->sin_family = AF_INET;
-        in->sin_port = ::htons(port);
-        in->sin_addr.s_addr = ::htonl(INADDR_LOOPBACK);
+        in->sin_port = htons(port);
+        in->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         return ret;
     }
 
-    int len () const {return int(sizeof(m_storage));}
+    socklen_t len () const {return socklen_t(sizeof(m_storage));}
     sockaddr const * ptr () const {return reinterpret_cast<sockaddr const *>(&m_storage);}
     sockaddr * ptr () {return reinterpret_cast<sockaddr *>(&m_storage);}
 
@@ -139,8 +147,8 @@ struct Address {
     sockaddr_in6 * asIPv6 () {return reinterpret_cast<sockaddr_in6 *>(&m_storage);}
 
     ADDRESS_FAMILY family () const {return m_storage.ss_family;}
-    U16 port () const {return ::ntohs(asIPv4()->sin_port);}
-    U32 ipv4 () const {return ::ntohl(asIPv4()->sin_addr.s_addr);}
+    U16 port () const {return ntohs(asIPv4()->sin_port);}
+    U32 ipv4 () const {return ntohl(asIPv4()->sin_addr.s_addr);}
     char const * ipv4str () const {return ::inet_ntoa(asIPv4()->sin_addr);}
 
     friend bool operator == (Address const & a, Address const & b) {
@@ -181,7 +189,7 @@ public:
             throw Exception{Error::SocketSetOptions, "Failed to set socket to non-blocking mode."};
 
         /* Set socket options. Most of these are only checked/take effect after bind(). */
-        constexpr ::LINGER linger = {};   // disable linger
+        constexpr LINGER linger = {};   // disable linger
         ::setsockopt(m_sock, SOL_SOCKET, SO_LINGER, (char const *)&linger, sizeof(linger));
 
         //::setsockopt(m_sock, SOL_SOCKET, SO_RCVBUF, (char const *)&m_cfg.os_recv_buff_size, sizeof(m_cfg.os_recv_buff_size));
@@ -190,13 +198,15 @@ public:
         constexpr int should_reuse_addr = 0;
         ::setsockopt(m_sock, SOL_SOCKET, SO_REUSEADDR, (char const *)&should_reuse_addr, sizeof(should_reuse_addr));
 
+    #if !defined(Y_FEATURE_OS_POSIX)
         constexpr int exclusive_addr_use = 1;
         ::setsockopt(m_sock, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char const *)&exclusive_addr_use, sizeof(exclusive_addr_use));
-
+    #endif
+        
         if (0 != ::bind(m_sock, m_cfg.bind_address.ptr(), m_cfg.bind_address.len()))
             throw Exception{Error::SocketBind, "bind() failed."};
 
-        m_recv_buf.ptr = reinterpret_cast<byte *>(::malloc(m_cfg.recv_buffer_size));
+        m_recv_buf.ptr = reinterpret_cast<Byte *>(::malloc(m_cfg.recv_buffer_size));
         m_recv_buf.end = m_recv_buf.ptr;
         if (!Y_PTR_VALID(m_recv_buf.ptr))
             throw Exception{Error::NoMem, "Couldn't allocate memory for recv buffer."};
@@ -204,7 +214,7 @@ public:
     }
 
     ~UDP () noexcept {
-        ::closesocket(m_sock);
+        closesocket(m_sock);
         m_sock = INVALID_SOCKET;
 
         ::free(m_recv_buf.ptr);
@@ -213,7 +223,7 @@ public:
 
     Address getBoundAddr () const {
         Address ret = {};
-        int addr_len = ret.len();
+        socklen_t addr_len = ret.len();
         ::getsockname(m_sock, ret.ptr(), &addr_len);
         return ret;
     }
@@ -223,7 +233,7 @@ public:
         m_recv_buf.end = m_recv_buf.ptr;
         m_last_error = 0;
 
-        int peer_addr_len = m_recv_peer.len();
+        auto peer_addr_len = m_recv_peer.len();
         int r = ::recvfrom(m_sock,
             (char *)m_recv_buf.ptr, int(m_recv_buf.capacity()), 0,
             m_recv_peer.ptr(), &peer_addr_len

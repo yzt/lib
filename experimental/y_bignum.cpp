@@ -23,13 +23,13 @@ dig (y_bignum_num_t const * num, int idx) {
     return num->digs[idx];
 }
 
-static inline y_bignum_dig_t
-dig_safe (y_bignum_num_t const * num, int idx) {
-    if (num && num->digs && idx >= 0 && idx < num->size)
-        return num->digs[idx];
-    else
-        return 0;
-}
+//static inline y_bignum_dig_t
+//dig_safe (y_bignum_num_t const * num, int idx) {
+//    if (num && num->digs && idx >= 0 && idx < num->size)
+//        return num->digs[idx];
+//    else
+//        return 0;
+//}
 
 static inline void
 set_dig (y_bignum_num_t * num, int idx, y_bignum_dig_t v) {
@@ -54,11 +54,11 @@ is_negative (y_bignum_num_t const * num) {
     return ret;
 }
 
-static inline void
-set_sign (y_bignum_num_t * num, bool negative) {
-    if (num)
-        num->negative = negative;
-}
+//static inline void
+//set_sign (y_bignum_num_t * num, bool negative) {
+//    if (num)
+//        num->negative = negative;
+//}
 
 struct ResultAndCarry {
     y_bignum_dig_t result, carry;

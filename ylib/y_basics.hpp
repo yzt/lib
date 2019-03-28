@@ -42,6 +42,7 @@
 #if defined(_WIN32)
     #define Y_FEATURE_OS_WIN                1
 #elif __APPLE__   // NOTE(yzt): no defined() needed here.
+#include <TargetConditionals.h>
     #define Y_FEATURE_OS_POSIX              1
     #if TARGET_OS_IPHONE && TARGET_IPHONE_SIMULATOR
         #define Y_FEATURE_OS_IOS_SIMULATOR  1
