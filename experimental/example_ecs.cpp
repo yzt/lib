@@ -68,7 +68,7 @@ struct Compo {
 #define EX_STRUCT_ARR(struct_, type_, cnt_, name_, desc_)                   \
         EX_COMP_ACTUAL_TYPE_OF_ ## type_ name_ [cnt_];                      \
     /**/
-#define EX_STRUCT_END(name_)                                                \
+#define EX_STRUCT_END(name_, version_)                                      \
     };                                                                      \
     /**/
 
@@ -83,7 +83,7 @@ struct Compo {
         {Type::type_, offsetof(struct_, name_),                             \
             cnt_ * sizeof(struct_::name_), #name_, desc_},                  \
     /**/
-#define EX_STATIX_END(name_)                                                \
+#define EX_STATIX_END(name_, version_)                                      \
     };                                                                      \
     inline Compo const name_::s_compo {                                     \
         #name_, sizeof(name_),                                              \
@@ -132,7 +132,7 @@ inline Compo const YYY::compo {"YYY", sizeof(YYY), sizeof(YYY::fields) / sizeof(
         field(ZZZ, F32, x, "X Coordinate")                                  \
         field(ZZZ, F32, y, "Y Coordinate")                                  \
         field(ZZZ, F32, z, "Z Coordinate")                                  \
-    end(ZZZ)                                                                \
+    end(ZZZ, 1)                                                             \
     /**/
 DeclareNewComponent(COMPONENT_DATA__ZZZ)
 #undef COMPONENT_DATA__ZZZ

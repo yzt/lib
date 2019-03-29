@@ -191,7 +191,7 @@ WorldMemoryStats World_GatherMemoryStats (World const * world);
 struct QueryResult {
     bool valid;
     SizeType entity_type_count;
-    SizeType entity_types [];
+    //SizeType entity_types [];
 };
 QueryResult World_QueryEntities (
     ComponentBitSet const & components_read,
