@@ -98,13 +98,13 @@ expect (State * state, char expected) {    // also consumes the character
     Advance(state);
 }
 
-static inline void
-expect (State * state, char expected1, char expected2) {
-    if (state->cur != expected1 && state->cur != expected2) {
-        throw Exception{JSON_SEV_Error, JSON_ERR_ExpectedToken, state->loc, "Expected A or B, but found X", expected1, expected2};
-    }
-    Advance(state);
-}
+//static inline void
+//expect (State * state, char expected1, char expected2) {
+//    if (state->cur != expected1 && state->cur != expected2) {
+//        throw Exception{JSON_SEV_Error, JSON_ERR_ExpectedToken, state->loc, "Expected A or B, but found X", expected1, expected2};
+//    }
+//    Advance(state);
+//}
 
 static inline void
 skip_ws (State * state) {

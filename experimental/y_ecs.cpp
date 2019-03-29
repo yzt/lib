@@ -26,14 +26,14 @@ void g_dealloc (void * ptr, size_t /*size*/) {
 //}
 //----------------------------------------------------------------------
 // Note(yzt): Returns the power, not the actual number, i.e. for 16384, it returns 14.
-static inline SizeType NextPowerOfTwo (SizeType x) {
-    SizeType ret = 0, v = 1;
-    while (v < x) {
-        v *= 2;
-        ret += 1;
-    }
-    return ret;
-}
+//static inline SizeType NextPowerOfTwo (SizeType x) {
+//    SizeType ret = 0, v = 1;
+//    while (v < x) {
+//        v *= 2;
+//        ret += 1;
+//    }
+//    return ret;
+//}
 //----------------------------------------------------------------------
 static inline SizeType StrCpy (char * dst, char const * src, SizeType dst_size) {
     SizeType ret = 0;

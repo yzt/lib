@@ -1,4 +1,3 @@
-
 #include "y_profiler.h"
 #include <atomic>
 #include <cassert>

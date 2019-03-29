@@ -13,8 +13,8 @@ typedef struct {
 } y_bignum_raw_t;
 
 typedef struct {
-    //int shift;
-    //int sign;
+    int shift;
+    int sign;
 } y_bignum_meta_t;
 
 typedef struct {
