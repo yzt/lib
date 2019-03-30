@@ -118,6 +118,19 @@ static inline T BitSet_GetBit (T (&bits) [N], unsigned idx) {
     return (bits[w] >> b) & 1;
 }
 //----------------------------------------------------------------------
+template <typename T, size_t N>
+static inline unsigned BitSet_FindOne (T (&bits) [N], unsigned start_idx) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    unsigned ret = 0;
+    for (size_t i = 0; i < N; ++i) {
+        T mask = 1;
+        for (unsigned b = 8 * sizeof(T); b != 0; --b, mask <<= 1)
+            if (bits[i] & mask)
+                ret += 1;
+    }
+    return ret;
+}
+//----------------------------------------------------------------------
 //----------------------------------------------------------------------
 static bool PagedArray_InitEmpty (World::PerEntityComponent * array) {
     *array = {};
@@ -253,6 +266,55 @@ ComponentType const * ComponentType_FindBySeqNum (TypeManager const * type_manag
     ComponentType const * ret = nullptr;
     if (type_manager && type_manager->initialized) {
         for (ret = type_manager->component_type_first; ret; ret = ret->next)
+            if (seqnum == ret->seqnum)
+                break;
+    }
+    return ret;
+}
+//----------------------------------------------------------------------
+bool TagType_NameExists (TypeManager const * type_manager, char const * name) {
+    return nullptr != TagType_FindByName(type_manager, name);
+}
+//----------------------------------------------------------------------
+bool TagType_IsRegistrationClosed (TypeManager const * type_manager) {
+    return ComponentType_IsRegistrationClosed(type_manager);
+}
+//----------------------------------------------------------------------
+ComponentCount TagType_Count (TypeManager const * type_manager) {
+    ComponentCount ret = 0;
+    if (type_manager && type_manager->initialized)
+        ret = type_manager->tag_type_count;
+    return ret;
+}
+//----------------------------------------------------------------------
+TagType const * TagType_GetFirst (TypeManager const * type_manager) {
+    TagType const * ret = nullptr;
+    if (type_manager && type_manager->initialized)
+        ret = type_manager->tag_type_first;
+    return ret;
+}
+//----------------------------------------------------------------------
+TagType const * TagType_GetNext (TagType const * tag_type) {
+    TagType const * ret = nullptr;
+    if (tag_type)
+        ret = tag_type->next;
+    return ret;
+}
+//----------------------------------------------------------------------
+TagType const * TagType_FindByName (TypeManager const * type_manager, char const * name) {
+    TagType const * ret = nullptr;
+    if (type_manager && type_manager->initialized) {
+        for (ret = type_manager->tag_type_first; ret; ret = ret->next)
+            if (0 == ::strcmp(name, ret->name))
+                break;
+    }
+    return ret;
+}
+//----------------------------------------------------------------------
+TagType const * TagType_FindBySeqNum (TypeManager const * type_manager, ComponentCount seqnum) {
+    TagType const * ret = nullptr;
+    if (type_manager && type_manager->initialized) {
+        for (ret = type_manager->tag_type_first; ret; ret = ret->next)
             if (seqnum == ret->seqnum)
                 break;
     }

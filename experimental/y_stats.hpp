@@ -55,7 +55,7 @@ public:
 
     bool shift () { // returns true iff there was "carry", i.e. now() wrapped around.
         m_now = ((m_now + 1 < Length) ? m_now + 1 : 0);
-        for (int i = N - 1; i > 0; --i)
+        for (int i = Length - 1; i > 0; --i)
             m_bunches[i] = m_bunches[i - 1];
         m_bunches[0] = {};
         return 0 == m_now;

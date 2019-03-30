@@ -12,21 +12,24 @@ set (LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
 include_directories ("ylib")
 
-if (MSVC)
+if ((MSVC) OR (CMAKE_CXX_COMPILER_ID MATCHES "MSVC"))
 	add_definitions (/WX)		# Warnings as errors
 	add_definitions (/W4)		# Warning level 4
 	add_definitions (/wd4100)	# Disable warning about "unreferenced formal parameter"
 	add_definitions (/EHsc)
 	add_definitions (-D_CRT_SECURE_NO_WARNINGS)
 	add_definitions (/std:c++latest)
-elseif (CMAKE_COMPILER_IS_GNUCXX)
-	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1z")
+	add_definitions (/permissive-)
+elseif ((CMAKE_COMPILER_IS_GNUCXX) OR (CMAKE_CXX_COMPILER_ID MATCHES "GNU"))
+	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 	add_definitions (-Wall)
 	#add_definitions (-Wno-invalid-offsetof)
-else ()	# hopefully, it's Clang!
-	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1z")
+elseif ((CMAKE_COMPILER_IS_CLANG) OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
+	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 	add_definitions (-Wall)
 	#add_definitions (-Wno-invalid-offsetof)
+else ()
+    message("Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
 endif ()
 
 #-----------------------------------------------------------------------

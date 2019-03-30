@@ -19,7 +19,7 @@ struct PositionComponent : ex::ComponentBase<PositionComponent> {
     static char const * GetComponentName () {return "Position";}
 
     float x, y, z;
-    char _ [30];
+    char _ [32];
 };
 
 struct FlagsComponent : ex::ComponentBase<FlagsComponent> {
@@ -155,6 +155,16 @@ int main () {
     ex::EntityType_Register_ByCompNames(tm, "E", 1, "Name", "Position", "Direction", "Flags", nullptr);
     ex::EntityType_CloseRegisteration(tm);
 
+    using MyQueryParams = ex::QueryParams<
+        ex::ComponentTypePack<PositionComponent>,
+        ex::ComponentTypePack<>,
+        ex::ComponentTypePack<>,
+        ex::ComponentTypePack<NameComponent>,
+        ex::ComponentTypePack<>,
+        ex::TagTypePack<>,
+        ex::TagTypePack<>
+    >;
+
     for (unsigned sz = 1024; sz < 500'000; sz *= 4) {
         ex::World world_;
         auto world = &world_;
@@ -172,10 +182,15 @@ int main () {
             , ms.total_bytes - ms.overhead_bytes - ms.used_bytes - ms.usable_bytes - ms.unusable_bytes
             , ms.overhead_bytes, ms.used_bytes, ms.usable_bytes, ms.unusable_bytes
         );
+
+        ex::Query<MyQueryParams> query;
+        ex::World_CreateQuery(&query, world);
+
         auto t3 = 1'000 * Now();
         ex::World_Destroy(world);
         auto t4 = 1'000 * Now();
         ::printf ("\t\ttimes in ms: %8.3f, %8.3f, %8.3f\n", t1 - t0, t2 - t1, t4 - t3);
+
     }
 
     ex::TypeManager_Destroy(tm);

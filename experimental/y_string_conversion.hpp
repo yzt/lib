@@ -125,7 +125,6 @@ f2s (
     bool uppercase = false,
     bool nul_terminate = false
 ) {
-    frexp
 }
 
 //======================================================================
