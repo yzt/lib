@@ -2,6 +2,7 @@
 
 #include <cstddef>      // for size_t
 #include <cstdint>
+#include <initializer_list>
 #include <tuple>
 #include <type_traits>  // for checks in TypeManager_RegisterComponentType<T>
 
@@ -31,7 +32,7 @@ using SizeType = uint32_t;
 
 constexpr SizeType MaxNameLen = 63;
 constexpr ComponentCount MaxComponentTypes = 128;
-constexpr ComponentCount MaxTagsTypes = 64;
+constexpr ComponentCount MaxTagTypes = 64;
 constexpr SizeType MaxEntityTypes = 1'000;
 
 struct TypeManager;
@@ -45,7 +46,7 @@ struct BitSet {
 };
 
 using ComponentBitSet = BitSet<MaxComponentTypes>;
-using TagBitSet = BitSet<MaxTagsTypes>;
+using TagBitSet = BitSet<MaxTagTypes>;
 using EntityTypeBitSet = BitSet<MaxEntityTypes>;
 
 struct ComponentType {
@@ -71,7 +72,9 @@ struct EntityType {
     SizeType seqnum = SizeType(~SizeType(0));
     SizeType initial_capacity = 0;
     ComponentCount component_count = 0;
+    ComponentCount tag_count = 0;
     ComponentBitSet components;
+    TagBitSet tags;
     TypeManager * owner = nullptr;
     EntityType * next = nullptr;
     //EntityType * prev = nullptr;
@@ -87,6 +90,7 @@ struct TypeManager {
     ComponentType * component_type_first;
     ComponentType * component_type_last;
 
+    bool tag_type_registration_closed;
     ComponentCount tag_type_count;
     TagType * tag_type_first;
     TagType * tag_type_last;
@@ -198,6 +202,7 @@ ComponentType const * ComponentType_FindBySeqNum (TypeManager const * type_manag
 
 template <typename T>
 bool TagType_Register (TypeManager * type_manager);
+bool TagType_CloseRegisteration (TypeManager * type_manager);
 bool TagType_NameExists (TypeManager const * type_manager, char const * name);
 bool TagType_IsRegistrationClosed (TypeManager const * type_manager);
 ComponentCount TagType_Count (TypeManager const * type_manager);
@@ -206,23 +211,44 @@ TagType const * TagType_GetNext (TagType const * tag_type);
 TagType const * TagType_FindByName (TypeManager const * type_manager, char const * name);
 TagType const * TagType_FindBySeqNum (TypeManager const * type_manager, ComponentCount seqnum);
 
-bool EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, ComponentBitSet components);   // This is the main one, but you should use one of the other, more convenient functions.
-bool EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, ComponentCount component_seqnums [], unsigned component_count);
-bool EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, char const * component_names [], unsigned component_count);
-bool EntityType_Register_ByCompSeqnums (TypeManager * type_manager, char const * name, SizeType initial_capacity, ...); // End with -1
-bool EntityType_Register_ByCompNames (TypeManager * type_manager, char const * name, SizeType initial_capacity, ...); // end with nullptr
+bool ComponentBitSet_MakeEmpty (ComponentBitSet * out_components);
+bool ComponentBitSet_Make (ComponentBitSet * out_components, TypeManager const * type_manager, ComponentCount component_seqnums [], ComponentCount component_count);
+bool ComponentBitSet_Make (ComponentBitSet * out_components, TypeManager const * type_manager, char const * component_names [], ComponentCount component_count);
+bool ComponentBitSet_Make (ComponentBitSet * out_components, TypeManager const * type_manager, std::initializer_list<ComponentCount> component_seqnums);
+bool ComponentBitSet_Make (ComponentBitSet * out_components, TypeManager const * type_manager, std::initializer_list<char const *> component_names);
+bool ComponentBitSet_MakeFromSeqnums (ComponentBitSet * out_components, TypeManager const * type_manager, ...); // NOTE(yzt): End the list of (int) seqnums with -1 (or any negative integer.)
+bool ComponentBitSet_MakeFromNames (ComponentBitSet * out_components, TypeManager const * type_manager, ...);   // NOTE(yzt): End the list of (char const *) names with nullptr.
+template <typename PackOfComponentTypes>
+bool ComponentBitSet_Make (ComponentBitSet * out_components, TypeManager const * type_manager);
+
+bool TagBitSet_MakeEmpty (TagBitSet * out_tags);
+bool TagBitSet_Make (TagBitSet * out_tags, TypeManager const * type_manager, ComponentCount tag_seqnums [], ComponentCount tag_count);
+bool TagBitSet_Make (TagBitSet * out_tags, TypeManager const * type_manager, char const * tag_names [], ComponentCount tag_count);
+bool TagBitSet_Make (TagBitSet * out_tags, TypeManager const * type_manager, std::initializer_list<ComponentCount> tag_seqnums);
+bool TagBitSet_Make (TagBitSet * out_tags, TypeManager const * type_manager, std::initializer_list<char const *> tag_names);
+bool TagBitSet_MakeFromSeqnums (TagBitSet * out_tags, TypeManager const * type_manager, ...);   // NOTE(yzt): End the list of (int) seqnums with -1 (or any negative integer.)
+bool TagBitSet_MakeFromNames (TagBitSet * out_tags, TypeManager const * type_manager, ...);     // NOTE(yzt): End the list of (char const *) names with nullptr.
+template <typename PackOfTagTypes>
+bool TagBitSet_Make (TagBitSet * out_tags, TypeManager const * type_manager);
+
+EntityType * EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, ComponentBitSet components, TagBitSet tags);   // This is the main one, but you should use one of the other, more convenient functions.
+EntityType * EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, std::initializer_list<char const *> component_names, std::initializer_list<char const *> tag_names);
+//bool EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, ComponentCount component_seqnums [], unsigned component_count);
+//bool EntityType_Register (TypeManager * type_manager, char const * name, SizeType initial_capacity, char const * component_names [], unsigned component_count);
+//bool EntityType_Register_ByCompSeqnums (TypeManager * type_manager, char const * name, SizeType initial_capacity, ...); // End with -1
+//bool EntityType_Register_ByCompNames (TypeManager * type_manager, char const * name, SizeType initial_capacity, ...); // end with nullptr
 bool EntityType_CloseRegisteration (TypeManager * type_manager);
 bool EntityType_NameExists (TypeManager const * type_manager, char const * name);
-bool EntityType_ComponentSetExists (TypeManager const * type_manager, ComponentBitSet const & components);
+bool EntityType_ComponentAndTagSetsExist (TypeManager const * type_manager, ComponentBitSet const & components, TagBitSet const & tags);
 bool EntityType_IsRegistrationClosed (TypeManager const * type_manager);
 SizeType EntityType_Count (TypeManager const * type_manager);
 EntityType const * EntityType_GetFirst (TypeManager const * type_manager);
 EntityType const * EntityType_GetNext (EntityType const * entity_type);
 EntityType const * EntityType_FindByName (TypeManager const * type_manager, char const * name);
 EntityType const * EntityType_FindBySeqNum (TypeManager const * type_manager, SizeType seqnum);
-EntityType const * EntityType_FindByComponentSet (TypeManager const * type_manager, ComponentBitSet const & components);
+EntityType const * EntityType_FindByComponentAndTagSets (TypeManager const * type_manager, ComponentBitSet const & components, TagBitSet const & tags);
 
-bool World_Create (World * out_world, TypeManager const * type_manager, SizeType data_page_size);
+bool World_Create (World * out_world, TypeManager const * type_manager, SizeType data_page_size, SizeType max_entity_types = MaxEntityTypes, ComponentCount max_component_types = MaxComponentTypes, ComponentCount max_tags = MaxTagTypes);
 bool World_Destroy (World * world);
 WorldMemoryStats World_GatherMemoryStats (World const * world);
 
@@ -523,6 +549,16 @@ bool TagType_Register (TypeManager * type_manager) {
     return ret;
 }
 //----------------------------------------------------------------------
+template <typename PackOfComponentTypes>
+bool ComponentBitSet_Make (ComponentBitSet * out_components, TypeManager const * type_manager) {
+    //.....
+}
+//----------------------------------------------------------------------
+template <typename PackOfTagTypes>
+bool TagBitSet_Make (TagBitSet * out_tags, TypeManager const * type_manager) {
+    //.....
+}
+//----------------------------------------------------------------------
 template <typename QueryParamsType>
 bool World_CreateQuery (Query<QueryParamsType> * out_query, World * world) {
     static_assert(QueryParamsType::IsQueryParams, "");
@@ -537,6 +573,9 @@ bool World_CreateQuery (Query<QueryParamsType> * out_query, World * world) {
         auto te = QueryParamsType::TagsEssential::GetBitSet();
         auto tx = QueryParamsType::TagsExcluded::GetBitSet();
         
+        //.......................
+
+
         *out_query = {};
 
         out_query->world = world;

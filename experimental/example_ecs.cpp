@@ -148,11 +148,11 @@ int main () {
     ex::ComponentType_Register<DirectionComponent>(tm);
     ex::ComponentType_CloseRegisteration(tm);
 
-    ex::EntityType_Register_ByCompNames(tm, "A", 10'000, "Flags", "Position", nullptr);
-    ex::EntityType_Register_ByCompNames(tm, "B", 90'000, "Name", "Position", "Direction", nullptr);
-    ex::EntityType_Register_ByCompNames(tm, "C", 0, "Name", "Flags", nullptr);
-    ex::EntityType_Register_ByCompNames(tm, "D", 500'000, "Position", nullptr);
-    ex::EntityType_Register_ByCompNames(tm, "E", 1, "Name", "Position", "Direction", "Flags", nullptr);
+    ex::EntityType_Register(tm, "A",  10'000, {"Flags", "Position"}, {});
+    ex::EntityType_Register(tm, "B",  90'000, {"Name", "Position", "Direction"}, {});
+    ex::EntityType_Register(tm, "C",       0, {"Name", "Flags"}, {});
+    ex::EntityType_Register(tm, "D", 500'000, {"Position"}, {});
+    ex::EntityType_Register(tm, "E",       1, {"Name", "Position", "Direction", "Flags"}, {});
     ex::EntityType_CloseRegisteration(tm);
 
     using MyQueryParams = ex::QueryParams<
