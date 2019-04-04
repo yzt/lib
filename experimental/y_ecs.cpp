@@ -51,87 +51,6 @@ static inline SizeType StrCpy (char * dst, char const * src, SizeType dst_size) 
 }
 //----------------------------------------------------------------------
 //----------------------------------------------------------------------
-template <typename T, size_t N>
-static inline bool BitSet_Empty (T (&bits) [N]) {
-    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
-    for (size_t i = 0; i < N; ++i)
-        if (bits[i] != 0)
-            return false;
-    return true;
-}
-//----------------------------------------------------------------------
-template <typename T, size_t N>
-static inline unsigned BitSet_CountOnes (T (&bits) [N]) {
-    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
-    unsigned ret = 0;
-    for (size_t i = 0; i < N; ++i) {
-        T mask = 1;
-        for (unsigned b = 8 * sizeof(T); b != 0; --b, mask <<= 1)
-            if (bits[i] & mask)
-                ret += 1;
-    }
-    return ret;
-}
-//----------------------------------------------------------------------
-template <typename T, size_t N>
-static inline void BitSet_SetBit (T (&bits) [N], unsigned idx) {
-    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
-    if (idx < N * 8 * sizeof(T)) {
-        unsigned w = idx / (8 * sizeof(T));
-        unsigned b = idx % (8 * sizeof(T));
-        bits[w] |= T(1) << b;
-    }
-}
-//----------------------------------------------------------------------
-template <typename T, size_t N>
-static inline void BitSet_ClearBit (T (&bits) [N], unsigned idx) {
-    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
-    if (idx < N * 8 * sizeof(T)) {
-        unsigned w = idx / (8 * sizeof(T));
-        unsigned b = idx % (8 * sizeof(T));
-        bits[w] &= ~(T(1) << b);
-    }
-}
-//----------------------------------------------------------------------
-template <typename T, size_t N>
-static inline void BitSet_ClearAll (T (&bits) [N]) {
-    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
-    for (size_t i = 0; i < N; ++i)
-        bits[i] = 0;
-}
-//----------------------------------------------------------------------
-template <typename T, size_t N>
-static inline bool BitSet_Equals (T (&a) [N], T (&b) [N]) {
-    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
-    for (size_t i = 0; i < N; ++i)
-        if (a[i] != b[i])
-            return false;
-    return true;
-}
-//----------------------------------------------------------------------
-template <typename T, size_t N>
-static inline T BitSet_GetBit (T (&bits) [N], unsigned idx) {
-    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
-    assert(idx < N * 8 * sizeof(T));
-    unsigned w = idx / (8 * sizeof(T));
-    unsigned b = idx % (8 * sizeof(T));
-    return (bits[w] >> b) & 1;
-}
-//----------------------------------------------------------------------
-template <typename T, size_t N>
-static inline unsigned BitSet_FindOne (T (&bits) [N], unsigned start_idx) {
-    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
-    unsigned ret = 0;
-    for (size_t i = 0; i < N; ++i) {
-        T mask = 1;
-        for (unsigned b = 8 * sizeof(T); b != 0; --b, mask <<= 1)
-            if (bits[i] & mask)
-                ret += 1;
-    }
-    return ret;
-}
-//----------------------------------------------------------------------
-//----------------------------------------------------------------------
 static bool PagedArray_InitEmpty (World::PerEntityComponent * array) {
     *array = {};
     return true;
@@ -755,6 +674,7 @@ bool World_Create (World * out_world, TypeManager const * type_manager, SizeType
         out_world &&
         type_manager &&
         type_manager->component_type_registration_closed &&
+        type_manager->tag_type_registration_closed &&
         type_manager->entity_type_registration_closed &&
         type_manager->component_type_count > 0 &&
         type_manager->entity_type_count > 0
@@ -780,11 +700,13 @@ bool World_Create (World * out_world, TypeManager const * type_manager, SizeType
         assert(comp_names_mem && comp_types_mem && entity_names_mem && entity_types_mem && entity_comps_mem);
 
         *out_world = {};
-        //out_world->type_manager = type_manager;
+        out_world->type_manager = type_manager;
         out_world->data_page_size = data_page_size; //SizeType(1) << page_size_shift;
         //out_world->data_page_shift = page_size_shift;
         //out_world->data_page_index_mask = data_page_size - 1;
         out_world->entity_component_data = entity_comps_mem;
+
+        out_world->tag_type_count = type_manager->tag_type_count;
 
         out_world->component_type_count = type_manager->component_type_count;
         out_world->component_type_names = comp_names_mem;
@@ -805,7 +727,9 @@ bool World_Create (World * out_world, TypeManager const * type_manager, SizeType
             assert(i == et->seqnum);
             StrCpy(out_world->entity_type_names[i], et->name, sizeof(World::Name));
             out_world->entity_types[i].components = et->components;
+            out_world->entity_types[i].tags = et->tags;
             out_world->entity_types[i].component_count = et->component_count;
+            out_world->entity_types[i].tag_count = et->tag_count;
             out_world->entity_types[i].entity_count = 0;
         }
 
@@ -824,7 +748,7 @@ bool World_Create (World * out_world, TypeManager const * type_manager, SizeType
                 }
             }
         }
-        //out_world->initialized = true;
+        out_world->initialized = true;
 
         ret = true;
     }

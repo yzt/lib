@@ -184,7 +184,7 @@ int main () {
         );
 
         ex::Query<MyQueryParams> query;
-        ex::World_CreateQuery(&query, world);
+        ex::Query_Create(&query, world);
 
         auto t3 = 1'000 * Now();
         ex::World_Destroy(world);

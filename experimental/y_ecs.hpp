@@ -10,6 +10,116 @@ namespace y {
 
 using Byte = uint8_t;
 
+template <unsigned BitCount>
+struct BitSet {
+    using Word = uint64_t;
+    static constexpr unsigned Count = (BitCount + 8 * sizeof(Word) - 1) / (8 * sizeof(Word));
+
+    Word bits [Count] = {0};
+};
+
+#pragma region BitSet Implementation
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+static inline bool BitSet_Empty (T (&bits) [N]) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    for (size_t i = 0; i < N; ++i)
+        if (bits[i] != 0)
+            return false;
+    return true;
+}
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+static inline unsigned BitSet_CountOnes (T (&bits) [N]) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    unsigned ret = 0;
+    for (size_t i = 0; i < N; ++i) {
+        T mask = 1;
+        for (unsigned b = 8 * sizeof(T); b != 0; --b, mask <<= 1)
+            if (bits[i] & mask)
+                ret += 1;
+    }
+    return ret;
+}
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+static inline void BitSet_SetBit (T (&bits) [N], unsigned idx) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    if (idx < N * 8 * sizeof(T)) {
+        unsigned w = idx / (8 * sizeof(T));
+        unsigned b = idx % (8 * sizeof(T));
+        bits[w] |= T(1) << b;
+    }
+}
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+static inline void BitSet_ClearBit (T (&bits) [N], unsigned idx) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    if (idx < N * 8 * sizeof(T)) {
+        unsigned w = idx / (8 * sizeof(T));
+        unsigned b = idx % (8 * sizeof(T));
+        bits[w] &= ~(T(1) << b);
+    }
+}
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+static inline void BitSet_ClearAll (T (&bits) [N]) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    for (size_t i = 0; i < N; ++i)
+        bits[i] = 0;
+}
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+static inline bool BitSet_Equals (T (&a) [N], T (&b) [N]) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    for (size_t i = 0; i < N; ++i)
+        if (a[i] != b[i])
+            return false;
+    return true;
+}
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+static inline T BitSet_GetBit (T (&bits) [N], unsigned idx) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    //assert(idx < N * 8 * sizeof(T));
+    unsigned w = idx / (8 * sizeof(T));
+    unsigned b = idx % (8 * sizeof(T));
+    return (bits[w] >> b) & 1;
+}
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+static inline unsigned BitSet_FindOne (T (&bits) [N], unsigned start_idx) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    unsigned ret = 0;
+    for (size_t i = 0; i < N; ++i) {
+        T mask = 1;
+        for (unsigned b = 8 * sizeof(T); b != 0; --b, mask <<= 1)
+            if (bits[i] & mask)
+                ret += 1;
+    }
+    return ret;
+}
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+static inline bool BitSet_ContainsAll (T const (&super) [N], T const (&sub) [N]) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    for (size_t i = 0; i < N; ++i)
+        if ((super[i] & sub[i]) != sub[i])
+            return false;
+    return true;
+}
+//----------------------------------------------------------------------
+template <typename T, size_t N>
+static inline bool BitSet_ContainsAny (T const (&super) [N], T const (&sub) [N]) {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
+    for (size_t i = 0; i < N; ++i)
+        if ((super[i] & sub[i]) != 0)
+            return true;
+    return false;
+}
+//----------------------------------------------------------------------
+#pragma endregion
+
 }   // namespace y
 
 
@@ -36,14 +146,6 @@ constexpr ComponentCount MaxTagTypes = 64;
 constexpr SizeType MaxEntityTypes = 1'000;
 
 struct TypeManager;
-
-template <SizeType BitCount>
-struct BitSet {
-    using Word = uint64_t;
-    static constexpr SizeType Count = (BitCount + 8 * sizeof(Word) - 1) / (8 * sizeof(Word));
-
-    Word bits [Count] = {0};
-};
 
 using ComponentBitSet = BitSet<MaxComponentTypes>;
 using TagBitSet = BitSet<MaxTagTypes>;
@@ -104,13 +206,15 @@ struct TypeManager {
 struct World {
     using Name = char [MaxNameLen + 1];
 
-    //bool initialized;
-    //TypeManager const * type_manager;
+    bool initialized;
+    TypeManager const * type_manager;
     SizeType data_page_size;    // Note(yzt): Treat as constant, if you value your sanity! Also, set to a power of two (e.g. 16K.)
     //SizeType data_page_shift;
     //SizeType data_page_index_mask;
     
     SizeType total_entity_count;
+
+    ComponentCount tag_type_count;
 
     ComponentCount component_type_count;
     Name * component_type_names;
@@ -123,7 +227,9 @@ struct World {
     Name * entity_type_names;
     struct PerEntityType {
         ComponentBitSet components;
+        TagBitSet tags;
         ComponentCount component_count;
+        ComponentCount tag_count;
         SizeType entity_count;
     } * entity_types;
 
@@ -137,6 +243,8 @@ struct World {
         SizeType elements_in_last_page;
     } * entity_component_data;      // NOTE(yzt): The ComponentTypes of each EntityType are laid together, i.e. element 0 is the 1st component type of the 1st entity type, element 1 is the 2nd component type of the 1st entity type, etc.
 };
+
+//---------------------------------------------------------------------
 
 // Note(yzt): Component types (e.g. MyComponent) must inherit from 
 //      Ex::ComponentBase<MyComponent>
@@ -216,8 +324,8 @@ bool ComponentBitSet_Make (ComponentBitSet * out_components, TypeManager const *
 bool ComponentBitSet_Make (ComponentBitSet * out_components, TypeManager const * type_manager, char const * component_names [], ComponentCount component_count);
 bool ComponentBitSet_Make (ComponentBitSet * out_components, TypeManager const * type_manager, std::initializer_list<ComponentCount> component_seqnums);
 bool ComponentBitSet_Make (ComponentBitSet * out_components, TypeManager const * type_manager, std::initializer_list<char const *> component_names);
-bool ComponentBitSet_MakeFromSeqnums (ComponentBitSet * out_components, TypeManager const * type_manager, ...); // NOTE(yzt): End the list of (int) seqnums with -1 (or any negative integer.)
-bool ComponentBitSet_MakeFromNames (ComponentBitSet * out_components, TypeManager const * type_manager, ...);   // NOTE(yzt): End the list of (char const *) names with nullptr.
+//bool ComponentBitSet_MakeFromSeqnums (ComponentBitSet * out_components, TypeManager const * type_manager, ...); // NOTE(yzt): End the list of (int) seqnums with -1 (or any negative integer.)
+//bool ComponentBitSet_MakeFromNames (ComponentBitSet * out_components, TypeManager const * type_manager, ...);   // NOTE(yzt): End the list of (char const *) names with nullptr.
 template <typename PackOfComponentTypes>
 bool ComponentBitSet_Make (ComponentBitSet * out_components, TypeManager const * type_manager);
 
@@ -226,8 +334,8 @@ bool TagBitSet_Make (TagBitSet * out_tags, TypeManager const * type_manager, Com
 bool TagBitSet_Make (TagBitSet * out_tags, TypeManager const * type_manager, char const * tag_names [], ComponentCount tag_count);
 bool TagBitSet_Make (TagBitSet * out_tags, TypeManager const * type_manager, std::initializer_list<ComponentCount> tag_seqnums);
 bool TagBitSet_Make (TagBitSet * out_tags, TypeManager const * type_manager, std::initializer_list<char const *> tag_names);
-bool TagBitSet_MakeFromSeqnums (TagBitSet * out_tags, TypeManager const * type_manager, ...);   // NOTE(yzt): End the list of (int) seqnums with -1 (or any negative integer.)
-bool TagBitSet_MakeFromNames (TagBitSet * out_tags, TypeManager const * type_manager, ...);     // NOTE(yzt): End the list of (char const *) names with nullptr.
+//bool TagBitSet_MakeFromSeqnums (TagBitSet * out_tags, TypeManager const * type_manager, ...);   // NOTE(yzt): End the list of (int) seqnums with -1 (or any negative integer.)
+//bool TagBitSet_MakeFromNames (TagBitSet * out_tags, TypeManager const * type_manager, ...);     // NOTE(yzt): End the list of (char const *) names with nullptr.
 template <typename PackOfTagTypes>
 bool TagBitSet_Make (TagBitSet * out_tags, TypeManager const * type_manager);
 
@@ -416,7 +524,7 @@ struct QueryResult {
 };
 
 template <typename QueryParamsType>
-bool World_CreateQuery (Query<QueryParamsType> * out_query, World * world);
+bool Query_Create (Query<QueryParamsType> * out_query, World * world);
 
 //template <typename QueryParamsType>
 //bool World_DestroyQuery (Query<QueryParamsType> * query);
@@ -551,16 +659,34 @@ bool TagType_Register (TypeManager * type_manager) {
 //----------------------------------------------------------------------
 template <typename PackOfComponentTypes>
 bool ComponentBitSet_Make (ComponentBitSet * out_components, TypeManager const * type_manager) {
-    //.....
+    static_assert(PackOfComponentTypes::IsComponentTypePack);
+    static_assert(PackOfComponentTypes::Count > 0);
+
+    bool ret = false;
+    if (out_components && type_manager) {
+        //TODO(yzt): Make sure all the components are from the same type manager.
+        *out_components = PackOfComponentTypes::GetBitSet();
+        ret = true;
+    }
+    return ret;
 }
 //----------------------------------------------------------------------
 template <typename PackOfTagTypes>
 bool TagBitSet_Make (TagBitSet * out_tags, TypeManager const * type_manager) {
-    //.....
+    static_assert(PackOfTagTypes::IsTagTypePack);
+    static_assert(PackOfTagTypes::Count > 0);
+
+    bool ret = false;
+    if (out_tags && type_manager) {
+        //TODO(yzt): Make sure all the tags are from the same type manager.
+        *out_tags = PackOfTagTypes::GetBitSet();
+        ret = true;
+    }
+    return ret;
 }
 //----------------------------------------------------------------------
 template <typename QueryParamsType>
-bool World_CreateQuery (Query<QueryParamsType> * out_query, World * world) {
+bool Query_Create (Query<QueryParamsType> * out_query, World * world) {
     static_assert(QueryParamsType::IsQueryParams, "");
 
     bool ret = false;
@@ -573,12 +699,22 @@ bool World_CreateQuery (Query<QueryParamsType> * out_query, World * world) {
         auto te = QueryParamsType::TagsEssential::GetBitSet();
         auto tx = QueryParamsType::TagsExcluded::GetBitSet();
         
-        //.......................
-
-
         *out_query = {};
-
         out_query->world = world;
+        out_query->entity_type_count = 0;
+        for (unsigned entity_type_idx = 0; entity_type_idx < world->entity_type_count; ++entity_type_idx) {
+            auto const * et = &world->entity_types[entity_type_idx];
+
+            if (BitSet_ContainsAll(et->components.bits, cef.bits) &&
+                BitSet_ContainsAll(et->components.bits, cer.bits) &&
+                !BitSet_ContainsAny(et->components.bits, cx.bits) &&
+                BitSet_ContainsAll(et->tags.bits, te.bits) &&
+                !BitSet_ContainsAny(et->tags.bits, tx.bits)
+            ) {
+                BitSet_SetBit(out_query->entity_types_set.bits, entity_type_idx);
+                out_query->entity_type_count += 1;
+            }
+        }
         ret = true;
     }
     return ret;
