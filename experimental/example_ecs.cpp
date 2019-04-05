@@ -148,6 +148,8 @@ int main () {
     ex::ComponentType_Register<DirectionComponent>(tm);
     ex::ComponentType_CloseRegisteration(tm);
 
+    ex::TagType_CloseRegisteration(tm);
+
     ex::EntityType_Register(tm, "A",  10'000, {"Flags", "Position"}, {});
     ex::EntityType_Register(tm, "B",  90'000, {"Name", "Position", "Direction"}, {});
     ex::EntityType_Register(tm, "C",       0, {"Name", "Flags"}, {});
