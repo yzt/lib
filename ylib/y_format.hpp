@@ -663,7 +663,7 @@ unsigned ToCStr (char * buffer, unsigned size, std::string const & fmt, ArgTypes
 template <typename ... ArgTypes>
 unsigned ToCStr (char * buffer, unsigned size, std::string_view const & fmt, ArgTypes && ... args) {
     unsigned ret = 0;
-    if (buffer && size && fmt) {
+    if (buffer && size && !fmt.empty()) {
         size -= 1;
         unsigned idx = 0;
         detail::Do(

@@ -28,7 +28,7 @@ public:
 public:
     static constexpr auto SizeOfKeyBuffer (int capacity) {return sizeof(K) * capacity;}
     static constexpr auto SizeOfValueBuffer (int capacity) {return sizeof(V) * capacity;}
-    static constexpr auto SizeOfMetadataBuffer (int capacity) {return sizeof(Metadata<H>) * capacity;}
+    static constexpr auto SizeOfMetadataBuffer (int capacity) {return sizeof(Metadata) * capacity;}
 
 public:
     Map (int capacity, void * key_buffer, void * value_buffer, void * metadata_buffer)
@@ -68,7 +68,7 @@ public:
     int find_hash (H hash) const {
         auto start_index = index_of_hash(hash);
         int dist = 0;
-        ...
+        //...
     }
 
     int find (K const & key) const {
