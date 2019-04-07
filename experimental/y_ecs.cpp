@@ -688,10 +688,12 @@ bool World_Create (World * out_world, TypeManager const * type_manager, SizeType
         //SizeType page_size_shift = NextPowerOfTwo(data_page_size);
         //data_page_size = (SizeType(1) << page_size_shift);
 
+        ComponentCount tag_count = type_manager->tag_type_count;
         ComponentCount comp_count = type_manager->component_type_count;
         SizeType entity_count = type_manager->entity_type_count;
         SizeType entity_comp_count = entity_count * comp_count;
 
+        auto    tag_names_mem = static_cast<World::Name *>(g_alloc_zero(tag_count * sizeof(World::Name)));
         auto   comp_names_mem = static_cast<World::Name *>(g_alloc_zero(comp_count * sizeof(World::Name)));
         auto   comp_types_mem = static_cast<World::PerComponentType *>(g_alloc_zero(comp_count * sizeof(World::PerComponentType)));
         auto entity_names_mem = static_cast<World::Name *>(g_alloc_zero(entity_count * sizeof(World::Name)));
@@ -706,12 +708,20 @@ bool World_Create (World * out_world, TypeManager const * type_manager, SizeType
         //out_world->data_page_index_mask = data_page_size - 1;
         out_world->entity_component_data = entity_comps_mem;
 
+        unsigned i = 0;
+
         out_world->tag_type_count = type_manager->tag_type_count;
+        out_world->tag_type_names = tag_names_mem;
+        i = 0;
+        for (auto tt = type_manager->tag_type_first; tt; (tt = tt->next), ++i) {
+            assert(i == tt->seqnum);
+            StrCpy(out_world->tag_type_names[i], tt->name, sizeof(World::Name));
+        }
 
         out_world->component_type_count = type_manager->component_type_count;
         out_world->component_type_names = comp_names_mem;
         out_world->component_types = comp_types_mem;
-        unsigned i = 0;
+        i = 0;
         for (auto ct = type_manager->component_type_first; ct; (ct = ct->next), ++i) {
             assert(i == ct->seqnum);
             StrCpy(out_world->component_type_names[i], ct->name, sizeof(World::Name));
@@ -766,6 +776,7 @@ bool World_Destroy (World * world) {
         g_dealloc(world->entity_type_names, world->entity_type_count * sizeof(World::Name));
         g_dealloc(world->component_types, world->component_type_count * sizeof(World::PerComponentType));
         g_dealloc(world->component_type_names, world->component_type_count * sizeof(World::Name));
+        g_dealloc(world->tag_type_names, world->tag_type_count * sizeof(World::Name));
         *world = {};
         ret = true;
     }
@@ -784,6 +795,7 @@ WorldMemoryStats World_GatherMemoryStats (World const * world) {
         ret.total_component_groups = size_t(world->component_type_count) * world->entity_type_count;
 
         add_to_overhead_and_total(sizeof(*world));
+        add_to_overhead_and_total(sizeof(World::Name) * world->tag_type_count);
         add_to_overhead_and_total(sizeof(World::PerComponentType) * world->component_type_count);
         add_to_overhead_and_total(sizeof(World::Name) * world->component_type_count);
         add_to_overhead_and_total(sizeof(World::PerEntityType) * world->entity_type_count);

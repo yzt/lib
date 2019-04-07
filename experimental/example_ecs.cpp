@@ -35,6 +35,11 @@ struct DirectionComponent : ex::ComponentBase<DirectionComponent> {
     char _ [80];
 };
 
+struct InactiveTag : ex::TagBase<InactiveTag> {
+    static char const * GetTagName () {return "Inactive";}
+};
+
+#pragma region Experimental Macro-based Introspection Stuff
 enum class Type : uint8_t {
     F32,
 };
@@ -136,6 +141,7 @@ inline Compo const YYY::compo {"YYY", sizeof(YYY), sizeof(YYY::fields) / sizeof(
     /**/
 DeclareNewComponent(COMPONENT_DATA__ZZZ)
 #undef COMPONENT_DATA__ZZZ
+#pragma endregion
 
 int main () {
     ex::TypeManager tm_;
@@ -146,15 +152,21 @@ int main () {
     ex::ComponentType_Register<PositionComponent>(tm);
     ex::ComponentType_Register<FlagsComponent>(tm);
     ex::ComponentType_Register<DirectionComponent>(tm);
-    ex::ComponentType_CloseRegisteration(tm);
+	ex::TagType_Register<InactiveTag>(tm);
 
+    ex::ComponentType_CloseRegisteration(tm);
     ex::TagType_CloseRegisteration(tm);
 
-    ex::EntityType_Register(tm, "A",  10'000, {"Flags", "Position"}, {});
-    ex::EntityType_Register(tm, "B",  90'000, {"Name", "Position", "Direction"}, {});
-    ex::EntityType_Register(tm, "C",       0, {"Name", "Flags"}, {});
-    ex::EntityType_Register(tm, "D", 500'000, {"Position"}, {});
-    ex::EntityType_Register(tm, "E",       1, {"Name", "Position", "Direction", "Flags"}, {});
+    ex::EntityType_Register(tm, "A" ,  10'000, {"Flags", "Position"}, {});
+    ex::EntityType_Register(tm, "A-",  10'000, {"Flags", "Position"}, {"Inactive"});
+    ex::EntityType_Register(tm, "B" ,  90'000, {"Name", "Position", "Direction"}, {});
+    ex::EntityType_Register(tm, "B-",  90'000, {"Name", "Position", "Direction"}, {"Inactive"});
+    ex::EntityType_Register(tm, "C" ,       0, {"Name", "Flags"}, {});
+    ex::EntityType_Register(tm, "C-",       0, {"Name", "Flags"}, {"Inactive"});
+    ex::EntityType_Register(tm, "D" , 500'000, {"Position"}, {});
+    ex::EntityType_Register(tm, "D-", 500'000, {"Position"}, {"Inactive"});
+    ex::EntityType_Register(tm, "E" ,       1, {"Name", "Position", "Direction", "Flags"}, {});
+    ex::EntityType_Register(tm, "E-",       1, {"Name", "Position", "Direction", "Flags"}, {"Inactive"});
     ex::EntityType_CloseRegisteration(tm);
 
     using MyQueryParams = ex::QueryParams<
@@ -167,6 +179,9 @@ int main () {
         ex::TagTypePack<>
     >;
 
+    ::printf(" page | tot|actv| bad| total bytes|  ovrhd  |   used  |  usable |unusable | create | stats  | destroy\n");
+    ::printf(" size |cgrp|cgrp|cgrp| (unaccntd) |         |         |         |         | (in ms)| (in ms)| (in ms)\n");
+    ::printf("------|----|----|----|------------|---------|---------|---------|---------|--------|--------|--------\n");
     for (unsigned sz = 1024; sz < 500'000; sz *= 4) {
         ex::World world_;
         auto world = &world_;
@@ -177,7 +192,7 @@ int main () {
         auto t1 = 1'000 * Now();
         ms = ex::World_GatherMemoryStats(world);
         auto t2 = 1'000 * Now();
-        ::printf("%6zu, %zu,%zu,%zu, %8zu(%zd),%6zu,%zu,%8zu,%5zu"
+        ::printf("%6zu|%4zu|%4zu|%4zu|%9zu(%zd)|%9zu|%9zu|%9zu|%9zu"
             , ms.page_size_bytes
             , ms.total_component_groups, ms.active_component_groups, ms.faulty_component_groups
             , ms.total_bytes
@@ -191,7 +206,7 @@ int main () {
         auto t3 = 1'000 * Now();
         ex::World_Destroy(world);
         auto t4 = 1'000 * Now();
-        ::printf ("\t\ttimes in ms: %8.3f, %8.3f, %8.3f\n", t1 - t0, t2 - t1, t4 - t3);
+        ::printf ("|%8.3f|%8.3f|%8.3f\n", t1 - t0, t2 - t1, t4 - t3);
 
     }
 

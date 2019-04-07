@@ -215,6 +215,7 @@ struct World {
     SizeType total_entity_count;
 
     ComponentCount tag_type_count;
+    Name * tag_type_names;
 
     ComponentCount component_type_count;
     Name * component_type_names;
@@ -274,6 +275,8 @@ private:
     template <typename>
     friend bool TagType_Register (TypeManager *);
 };
+template <typename T>
+TagType TagBase<T>::s_tag_type;
 
 struct WorldMemoryStats {
     bool valid;
@@ -625,7 +628,7 @@ bool TagType_Register (TypeManager * type_manager) {
     if (
         type_manager &&
         type_manager->initialized &&
-        !type_manager->component_type_registration_closed &&
+        !type_manager->tag_type_registration_closed &&
         !tag_type->registered &&
         !tag_type->owner &&
         !tag_type->next &&
