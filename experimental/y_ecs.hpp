@@ -88,16 +88,13 @@ static inline T BitSet_GetBit (T (&bits) [N], unsigned idx) {
 }
 //----------------------------------------------------------------------
 template <typename T, size_t N>
-static inline unsigned BitSet_FindOne (T (&bits) [N], unsigned start_idx) {
+static inline unsigned BitSet_FindOne (T (&bits) [N], unsigned start_idx = 0) {
     static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
-    unsigned ret = 0;
-    for (size_t i = 0; i < N; ++i) {
-        T mask = 1;
-        for (unsigned b = 8 * sizeof(T); b != 0; --b, mask <<= 1)
-            if (bits[i] & mask)
-                ret += 1;
-    }
-    return ret;
+    auto max_bits = N * sizeof(T) * 8;
+    for (unsigned i = start_idx; i < max_bits; ++i)
+        if (BitSet_GetBit(bits, i))
+            return i;
+    return max_bits;
 }
 //----------------------------------------------------------------------
 template <typename T, size_t N>
@@ -392,6 +389,15 @@ struct IsTag {
 template <typename T>
 inline constexpr bool IsTagV = IsTag<T>::value;
 
+template <typename T>
+struct PagedIterator {
+    T * element_cur;
+    T * element_end;
+    T ** page_cur;
+    T ** page_end;
+    SizeType elements_in_last_page;
+};
+
 template <typename ... Ts>
 struct ComponentTypePack;
 
@@ -402,6 +408,7 @@ struct ComponentTypePack<> {
     using ValueTupleType = std::tuple<>;
     using PointerTupleType = std::tuple<>;
     using ConstPointerTupleType = std::tuple<>;
+    using IteratorTupleType = std::tuple<>;
 
     using HeadType = void;
 
@@ -417,6 +424,7 @@ struct ComponentTypePack<T0, Ts...> {
     using ValueTupleType = std::tuple<T0, Ts...>;
     using PointerTupleType = std::tuple<T0 *, Ts * ...>;
     using ConstPointerTupleType = std::tuple<T0 const *, Ts const * ...>;
+    using IteratorTupleType = std::tuple<PagedIterator<T0>, PagedIterator<Ts>...>;
 
     using HeadType = T0;
     using TailType = ComponentTypePack<Ts...>;
@@ -487,11 +495,18 @@ struct QueryParams {
     using TagsEssential = T_TagsEssential;
     using TagsExcluded = T_TagsExcluded;
     
-    struct ResultIterationValue {
+    struct Pointers {
         typename ComponentsEssentialFullaccess::PointerTupleType fullaccess;
         typename ComponentsEssentialReadonly::ConstPointerTupleType readonly;
         typename ComponentsOptionalFullaccess::PointerTupleType opt_fullaccess;
         typename ComponentsOptionalReadonly::ConstPointerTupleType opt_readonly;
+    };
+
+    struct Iterator {
+        typename ComponentsEssentialFullaccess::IteratorTupleType fullaccess;
+        typename ComponentsEssentialReadonly::IteratorTupleType readonly;
+        typename ComponentsOptionalFullaccess::IteratorTupleType opt_fullaccess;
+        typename ComponentsOptionalReadonly::IteratorTupleType opt_readonly;
     };
 
     static_assert(ComponentsEssentialFullaccess::IsComponentTypePack, "");
@@ -517,11 +532,15 @@ struct Query {
 };
 
 template <typename QueryParamsType>
-struct QueryResult {
-    Query<QueryParamsType> * query;
-    //SizeType query_list_index;
-    SizeType type_index;
-    SizeType entity_index;
+struct QueryResultIterator {
+    Query<QueryParamsType> const * query;
+    World const * world;
+    //SizeType query_index;   // Where we are, inside the query's list of entity types
+    SizeType type_index;    // Where we are, inside the world's list of entity types
+    SizeType entity_index;  // Where we are, inside the list of entities in the world's entity type's entities
+
+    typename QueryParamsType::Iterator iterator;
+    typename QueryParamsType::Pointers value_ptrs;
 
     static_assert(QueryParamsType::IsQueryParams);
 };
@@ -733,6 +752,23 @@ bool Query_Create (Query<QueryParamsType> * out_query, World * world) {
 //    }
 //    return ret;
 //}
+//----------------------------------------------------------------------
+template <typename QueryParamsType>
+bool Query_GetFirstResult (QueryResultIterator<QueryParamsType> * out_result, Query<QueryParamsType> const * query) {
+    static_assert(QueryParamsType::IsQueryParams, "");
+    
+    bool ret = false;
+    if (out_result && query) {
+        *out_result = {};
+        out_result->query = query;
+        out_result->world = query->worldl;
+        out_result->type_index = BitSet_FindOne(query->entity_types_set.bits, 0);
+        out_result->entity_index = 0;
+        //...
+        ret = true;
+    }
+    return ret;
+}
 //----------------------------------------------------------------------
 //======================================================================
 

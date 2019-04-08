@@ -3,6 +3,9 @@
 #include <cstdarg>
 #include <cstdlib>  // for malloc() and friends
 #include <cstring>  // strcmp()
+
+//#include <Windows.h>  // for VirtualAlloc
+
 //======================================================================
 namespace y {
 namespace Ex {
@@ -19,6 +22,14 @@ void * g_alloc_zero (size_t size) {
 }
 void g_dealloc (void * ptr, size_t /*size*/) {
     ::free(ptr);
+}
+void * g_page_alloc (size_t size) {
+    //return ::VirtualAlloc(nullptr, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    return g_alloc(size);
+}
+void g_page_dealloc (void * ptr, size_t /*size*/) {
+    //::VirtualFree(ptr, 0, MEM_RELEASE);
+    g_dealloc(ptr, 0);
 }
 //======================================================================
 //static SizeType EntityType_CalcSize (ComponentCount component_count) {
@@ -62,7 +73,7 @@ static bool PagedArray_InitReserve (World::PerEntityComponent * array, SizeType 
         if (!array->page_ptrs)
             return false;
         for (SizeType i = 0; i < initial_pages; ++i) {
-            array->page_ptrs[i] = static_cast<Byte *>(g_alloc_zero(page_size));
+            array->page_ptrs[i] = static_cast<Byte *>(g_page_alloc(page_size));
             if (!array->page_ptrs[i])
                 return false;
         }
@@ -82,7 +93,7 @@ static bool PagedArray_Clear (World::PerEntityComponent * array, SizeType page_s
         if (array->page_ptrs) {
             assert(array->page_array_size > 0);
             for (SizeType i = 0; i < array->page_array_size && array->page_ptrs[i]; ++i)
-                g_dealloc(array->page_ptrs[i], page_size);
+                g_page_dealloc(array->page_ptrs[i], page_size);
             g_dealloc(array->page_ptrs, array->page_array_size * sizeof(Byte *));
             PagedArray_InitEmpty(array);
         } else {
