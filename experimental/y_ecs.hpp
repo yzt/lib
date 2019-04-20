@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <cstddef>      // for size_t
 #include <cstdint>
 #include <initializer_list>
@@ -415,6 +416,10 @@ struct ComponentTypePack<> {
     static ComponentBitSet GetBitSet () {
         return ComponentBitSet{};
     }
+
+    template <unsigned I>
+    static void Iterators_Init (IteratorTupleType * /*out_iterators*/, World const * /*world*/, SizeType /*entity_type_index*/) {
+    }
 };
 
 template <typename T0, typename ... Ts>
@@ -435,6 +440,45 @@ struct ComponentTypePack<T0, Ts...> {
         auto constexpr word_bits = sizeof(decltype(ret)::Word) * 8;
         ret.bits[seqnum / word_bits] |= (decltype(ret)::Word)(1) << (seqnum % word_bits);
         return ret;
+    }
+
+    template <unsigned I>
+    static void Iterators_Init (IteratorTupleType * out_iterators, World const * world, SizeType entity_type_index) {
+        static_assert(I < std::tuple_size_v<IteratorTupleType>, "");
+        assert(out_iterators);
+        assert(world);
+        assert(entity_type_index < world->entity_type_count);
+        assert(0 != BitSet_GetBit(world->entity_types[entity_type_index].components.bits, HeadType::GetTypeInfo().seqnum));
+
+        unsigned const comp_type_index = HeadType::GetTypeInfo().seqnum;
+        unsigned const ecd_index = entity_type_index * world->component_type_count + comp_type_index;
+
+        PagedIterator<HeadType> * mine = &(std::get<I>(*out_iterators));
+        World::PerEntityComponent * ecd = world->entity_component_data[ecd_index];
+
+        HeadType * ptr = nullptr;
+        SizeType cnt = 0;
+        if (ecd->pages_in_use > 1) {
+            ptr = ecd->page_ptrs[0];
+            cnt = world->component_types[comp_type_index].count_per_page;
+        } else if (ecd->pages_in_use == 1) {
+            ptr = ecd->page_ptrs[0];
+            cnt = ecd->elements_in_last_page;
+        }
+
+        mine->element_cur = ptr;
+        mine->element_end = ptr + sizeof(HeadType) * cnt;
+        mine->page_cur = ecd->page_ptrs;
+        mine->page_end = ecd->page_ptrs + ecd->pages_in_use;
+        mine->elements_in_last_page = ecd->elements_in_last_page;
+
+        InitIterators<I + 1>(out_iterator, world, entity_type_index);
+    }
+
+    template <unsigned I>
+    static void Iterators_Increment (IteratorTupleType * inout_iterators) {
+        static_assert(I < std::tuple_size_v<IteratorTupleType>, "");
+
     }
 
     static_assert(IsComponentV<HeadType>, "All types in a ComponentTypePack must be \"component\" types.");

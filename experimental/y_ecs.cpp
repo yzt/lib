@@ -1,5 +1,4 @@
 #include "y_ecs.hpp"
-#include <cassert>
 #include <cstdarg>
 #include <cstdlib>  // for malloc() and friends
 #include <cstring>  // strcmp()
