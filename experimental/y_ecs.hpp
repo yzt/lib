@@ -91,7 +91,7 @@ static inline T BitSet_GetBit (T (&bits) [N], unsigned idx) {
 template <typename T, size_t N>
 static inline unsigned BitSet_FindOne (T (&bits) [N], unsigned start_idx = 0) {
     static_assert(std::is_integral_v<T> && std::is_unsigned_v<T> && N > 0);
-    auto max_bits = N * sizeof(T) * 8;
+    auto max_bits = unsigned(N * sizeof(T) * 8);
     for (unsigned i = start_idx; i < max_bits; ++i)
         if (BitSet_GetBit(bits, i))
             return i;
@@ -292,6 +292,9 @@ struct WorldMemoryStats {
 };
 
 //----------------------------------------------------------------------
+
+
+//----------------------------------------------------------------------
 // Functions:
 //----------------------------------------------------------------------
 
@@ -472,7 +475,7 @@ struct ComponentTypePack<T0, Ts...> {
         mine->page_end = ecd->page_ptrs + ecd->pages_in_use;
         mine->elements_in_last_page = ecd->elements_in_last_page;
 
-        InitIterators<I + 1>(out_iterator, world, entity_type_index);
+        Iterators_Init<I + 1>(out_iterators, world, entity_type_index);
     }
 
     template <unsigned I>
@@ -561,6 +564,14 @@ struct QueryParams {
     static_assert(TagsEssential::IsTagTypePack, "");
     static_assert(TagsExcluded::IsTagTypePack, "");
     static_assert(ComponentsEssentialFullaccess::Count + ComponentsEssentialReadonly::Count > 0, "You must specify some components!");
+
+    using CEF = ComponentsEssentialFullaccess;
+    using CER = ComponentsEssentialReadonly;
+    using CX = ComponentsExcluded;
+    using COF = ComponentsOptionalFullaccess;
+    using COR = ComponentsOptionalReadonly;
+    using TE = TagsEssential;
+    using TX = TagsExcluded;
 };
 
 template <typename QueryParamsType>
@@ -799,17 +810,24 @@ bool Query_Create (Query<QueryParamsType> * out_query, World * world) {
 //----------------------------------------------------------------------
 template <typename QueryParamsType>
 bool Query_GetFirstResult (QueryResultIterator<QueryParamsType> * out_result, Query<QueryParamsType> const * query) {
-    static_assert(QueryParamsType::IsQueryParams, "");
-    
+    using QPT = QueryParamsType;
+    static_assert(QPT::IsQueryParams, "");
+
     bool ret = false;
     if (out_result && query) {
         *out_result = {};
         out_result->query = query;
-        out_result->world = query->worldl;
+        out_result->world = query->world;
         out_result->type_index = BitSet_FindOne(query->entity_types_set.bits, 0);
         out_result->entity_index = 0;
-        //...
-        ret = true;
+
+        if (out_result->type_index < MaxComponentTypes) {
+            QPT::CEF::Iterators_Init<0>(&out_result->iterator.fullaccess, out_result->world, out_result->type_index);
+            QPT::CER::Iterators_Init<0>(&out_result->iterator.readonly, out_result->world, out_result->type_index);
+            QPT::COF::Iterators_Init<0>(&out_result->iterator.opt_fullaccess, out_result->world, out_result->type_index);
+            QPT::COR::Iterators_Init<0>(&out_result->iterator.opt_readonly, out_result->world, out_result->type_index);
+            ret = true;
+        }
     }
     return ret;
 }

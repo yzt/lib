@@ -179,47 +179,47 @@ int main () {
         ex::TagTypePack<>
     >;
 
-    ::printf(" page | tot|actv| bad| total bytes|      ovrhd     |      used      |  usable |    unusable    | create | stats  | destroy\n");
+    ::printf(" page | tot|actv| bad| total bytes|    overhead    |      used      |  usable |    unusable    | create | stats  | destroy\n");
     ::printf(" size |cgrp|cgrp|cgrp| (unaccntd) |                |                |         |                | (in ms)| (in ms)| (in ms)\n");
-    ::printf("------|----|----|----|------------|----------------|----------------|---------|----------------|--------|--------|--------\n");
-    for (int t = 0; t < 5; ++t)
+    ::printf("------+----+----+----+------------+----------------+----------------+---------+----------------+--------+--------+--------\n");
     for (unsigned sz = 1024; sz <= 500'000; sz *= 2) {
-        ex::World world_;
-        auto world = &world_;
-        ex::WorldMemoryStats ms;
+        for (int t = 0; t < 3; ++t) {
+            ex::World world_;
+            auto world = &world_;
+            ex::WorldMemoryStats ms;
 
-        auto t0 = 1'000 * Now();
-        ex::World_Create(world, tm, sz);
-        auto t1 = 1'000 * Now();
-        ms = ex::World_GatherMemoryStats(world);
-        auto t2 = 1'000 * Now();
-        ::printf("%6zu|%4zu|%4zu|%4zu|%9zu(%zd)|%9zu(%4.1f%%)|%9zu(%4.1f%%)|%9zu|%9zu(%4.1f%%)"
-            , ms.page_size_bytes
-            , ms.total_component_groups, ms.active_component_groups, ms.faulty_component_groups
-            , ms.total_bytes
-            , ms.total_bytes - ms.overhead_bytes - ms.used_bytes - ms.usable_bytes - ms.unusable_bytes
-            , ms.overhead_bytes, 100.0 * ms.overhead_bytes / ms.total_bytes
-            , ms.used_bytes, 100.0 * ms.used_bytes / ms.total_bytes
-            , ms.usable_bytes/*, 100.0 * ms.usable_bytes / ms.total_bytes*/
-            , ms.unusable_bytes, 100.0 * ms.unusable_bytes / ms.total_bytes
-        );
+            auto t0 = 1'000 * Now();
+            ex::World_Create(world, tm, sz);
+            auto t1 = 1'000 * Now();
+            ms = ex::World_GatherMemoryStats(world);
+            auto t2 = 1'000 * Now();
+            ::printf("%6zu|%4zu|%4zu|%4zu|%9zu(%zd)|%9zu(%4.1f%%)|%9zu(%4.1f%%)|%9zu|%9zu(%4.1f%%)"
+                , ms.page_size_bytes
+                , ms.total_component_groups, ms.active_component_groups, ms.faulty_component_groups
+                , ms.total_bytes
+                , ms.total_bytes - ms.overhead_bytes - ms.used_bytes - ms.usable_bytes - ms.unusable_bytes
+                , ms.overhead_bytes, 100.0 * ms.overhead_bytes / ms.total_bytes
+                , ms.used_bytes, 100.0 * ms.used_bytes / ms.total_bytes
+                , ms.usable_bytes/*, 100.0 * ms.usable_bytes / ms.total_bytes*/
+                , ms.unusable_bytes, 100.0 * ms.unusable_bytes / ms.total_bytes
+            );
 
-        ex::Query<MyQueryParams> query;
-        ex::Query_Create(&query, world);
+            ex::Query<MyQueryParams> query;
+            ex::Query_Create(&query, world);
 
-        ex::QueryResultIterator<MyQueryParams> result;
-        ex::Query_GetFirstResult(&result, &query);
+            ex::QueryResultIterator<MyQueryParams> result;
+            ex::Query_GetFirstResult(&result, &query);
 
-        auto t3 = 1'000 * Now();
-        ex::World_Destroy(world);
-        auto t4 = 1'000 * Now();
-        ::printf ("|%8.3f|%8.3f|%8.3f", t1 - t0, t2 - t1, t4 - t3);
+            auto t3 = 1'000 * Now();
+            ex::World_Destroy(world);
+            auto t4 = 1'000 * Now();
+            ::printf ("|%8.3f|%8.3f|%8.3f", t1 - t0, t2 - t1, t4 - t3);
 
-        ::printf("\t(%zu, %zu)", sizeof(query), sizeof(result));
+            ::printf("\t(%zu, %zu)", sizeof(query), sizeof(result));
 
-        ::printf("\n");
+            ::printf("\n");
+        }
     }
-
     ex::TypeManager_Destroy(tm);
     ZZZ z = {};
     return int(z.x);
